@@ -4,7 +4,7 @@ from __future__ import unicode_literals
 
 AUTHOR = 'Carol'
 SITENAME = 'Deep Learning Tiếng Việt'
-SITEURL = 'https://deepmlml.com'
+SITEURL = 'http://deepmlml.com'
 
 PATH = 'content'
 
@@ -48,6 +48,10 @@ SOCIAL = (('Twitter', 'https://twitter.com/tuananh_bk'),)
 DEFAULT_PAGINATION = 10
 
 # Uncomment following line if you want document-relative URLs when developing
-RELATIVE_URLS = True
+# RELATIVE_URLS = True
 DISQUS_SITENAME = "deepmlml"
 GOOGLE_ANALYTICS = "UA-12027115-4"
+
+# copy CNAME
+STATIC_PATHS = ['images', 'extra/CNAME']
+EXTRA_PATH_METADATA = {'extra/CNAME': {'path': 'CNAME'},}
