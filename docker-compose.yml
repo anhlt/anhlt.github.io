@@ -1,0 +1,17 @@
+version: '2'
+
+services:
+    python:
+        build: 
+            context: .
+            dockerfile : Dockerfile
+        image: blog:latest 
+        ports:
+            - "6969:6969"
+        volumes:
+            - ".:/site"
+        tty: true
+        working_dir: /site
+        command: './develop_server.sh start 6969'
+        tty: true
+
