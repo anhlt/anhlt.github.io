@@ -4,7 +4,7 @@ from __future__ import unicode_literals
 
 AUTHOR = 'Carol'
 SITENAME = 'Deep Learning Tiếng Việt'
-SITEURL = 'deepmlml.com'
+SITEURL = 'https://deepmlml.com'
 
 PATH = 'content'
 
