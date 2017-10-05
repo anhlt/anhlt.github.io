@@ -9,12 +9,21 @@ Lang: vi
 Summary: 
 
 
-#### Xin chao moi nguoi
+#### Chèn code vào blog
 
     :::python
     print("The path-less shebang syntax *will* show line numbers.")
     for i in range(10)
         print i
 
-#### Update
+#### Chèn ảnh vào blog
 
+{% img right images/post_1/deep_learning.png 300 400 'title hahaha' 'asd' %}
+
+#### Chèn code từ file vào blog
+
+{% include_code post_1/hello.py lang:python :hidefilename: hello.py %}
+
+#### Youtube
+
+{% youtube hTWKbfoikeg %}

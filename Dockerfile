@@ -8,7 +8,7 @@ RUN apt-get -y upgrade
 # Install dependencies
 # I need LaTeX and pandoc to generate the CV:
 RUN apt-get install make git tex-common texlive pandoc -y
-RUN pip install pelican Markdown ghp-import 
+RUN pip install pelican Markdown ghp-import ipython
 RUN pip install --upgrade pelican Markdown ghp-import beautifulsoup4
 
 

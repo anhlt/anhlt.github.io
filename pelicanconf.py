@@ -14,7 +14,9 @@ DEFAULT_LANG = 'vi'
 
 # Plugin
 PLUGIN_PATHS = ['plugins']
-PLUGINS = ['pelican-bootstrapify']
+PLUGINS = ['pelican-bootstrapify', 'liquid_tags.img', 'liquid_tags.video',
+           'liquid_tags.youtube', 'liquid_tags.vimeo',
+           'liquid_tags.include_code']
 
 BOOTSTRAPIFY = {
     'table': ['table', 'table-striped', 'table-hover'],
@@ -52,6 +54,9 @@ DEFAULT_PAGINATION = 10
 DISQUS_SITENAME = "deepmlml"
 GOOGLE_ANALYTICS = "UA-12027115-4"
 
+# liquid tag
+CODE_DIR = 'code'
+
 # copy CNAME
-STATIC_PATHS = ['images', 'extra/CNAME']
-EXTRA_PATH_METADATA = {'extra/CNAME': {'path': 'CNAME'},}
+STATIC_PATHS = ['images', 'code', 'extra/CNAME']
+EXTRA_PATH_METADATA = {'extra/CNAME': {'path': 'CNAME'}}
