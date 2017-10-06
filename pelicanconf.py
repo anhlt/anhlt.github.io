@@ -29,7 +29,7 @@ SITEMAP_SAVE_AS = 'sitemap.xml'
 
 # Theme
 THEME = 'themes/alchemy/alchemy'
-SITESUBTITLE = 'A magical \u2728 Pelican theme'
+SITESUBTITLE = 'Hành trình đi lấy vợ \u2728 à nhầm, hành trình học deep learning'
 
 
 # Feed generation is usually not desired when developing
