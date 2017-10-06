@@ -17,25 +17,18 @@ Nội dung chủ yếu của blog này, sẽ là những vấn đề cùng mọi
 Gần đây tôi đang tự implement lại mô hình Faster RCNN, vì thế những bài đầu tiên về blog này sẽ viết về mô hình Faster RCNN.
 
 
-#### Chèn code vào blog
+#### Hiển thị Latex trên blog
 
-    :::python
-    print("The path-less shebang syntax *will* show line numbers.")
-    for i in range(10)
-        print i
+Bạn có thể sử dụng extension TamperMonkey, GeaseMonkey và cài đặt 
+[Texify the World](https://gist.githubusercontent.com/goatandsheep/c8bf7b4ae448e76208a0/raw/76d36877a82d34fccf6e17e63c3db3cbef3712c8/Texify-Mathjax.js)
 
-#### Chèn ảnh vào blog
+Hoặc cài đặt [TexTheWorld Chrome Extension](http://thewe.net/tex/). Nếu cài đặt đúng đắn, bạn sẽ thấy được biểu thức dưới đây.
 
-{% img right images/post_1/deep_learning.png 300 400 'title hahaha' 'asd' %}
-
-#### Chèn code từ file vào blog
-
-{% include_code post_1/hello.py lang:python :hidefilename: hello.py %}
+`[; e^{\pi i}+1=0 ;]`
 
 #### Youtube
 
 {% youtube hTWKbfoikeg %}
 
-#### Latex
 
-`[; e^{\pi i}+1=0 ;]`
+
