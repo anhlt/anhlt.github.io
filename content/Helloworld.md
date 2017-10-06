@@ -8,6 +8,14 @@ Author: h4cker
 Lang: vi
 Summary: 
 
+#### Lời giới thiệu
+
+Chào mọi người, tôi là một *kĩ sư* đang sống và làm việc tại Nhật Bản, tôi có một cô bạn gái ở Việt Nam. Chúng tôi đã yêu nhau được hơn 4 năm, và quyết định làm đám cưới vào cuối năm này. Yêu xa ắt hẳn đã bất tiện, yêu xa để chuẩn bị cưới còn nhiều bất tiện hơn. Vì thế tôi viết blog này, chia sẻ cùng các bạn những khó khăn, kinh nghiệm mà tôi đã trải qua, từ khi bắt đầu học deep learning cũng như tập tễnh bước chấn vào tìm hiểu về computer vision. 
+
+Nội dung chủ yếu của blog này, sẽ là những vấn đề cùng mọi người sẽ gặp phải khi training các bài toán. Tôi sẽ cố gắng chia sẻ kinh nghiệm của tôi khi re implement các paper, cách xử lý, debug khi mô hình không hoạt động đúng đắn.
+
+Gần đây tôi đang tự implement lại mô hình Faster RCNN, vì thế những bài đầu tiên về blog này sẽ viết về mô hình Faster RCNN.
+
 
 #### Chèn code vào blog
 
