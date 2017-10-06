@@ -27,3 +27,7 @@ Summary:
 #### Youtube
 
 {% youtube hTWKbfoikeg %}
+
+#### Latex
+
+`[; e^{\pi i}+1=0 ;]`
