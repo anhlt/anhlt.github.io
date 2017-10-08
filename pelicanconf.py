@@ -3,12 +3,12 @@
 from __future__ import unicode_literals
 
 AUTHOR = 'Carol'
-SITENAME = 'Deep Learning Tiếng Việt'
+SITENAME = 'Deep Learning'
 SITEURL = 'https://deepmlml.com'
 
 PATH = 'content'
 
-TIMEZONE = 'Asia/Ho_Chi_Minh'
+TIMEZONE = 'Asia/Tokyo'
 
 DEFAULT_LANG = 'vi'
 
@@ -16,7 +16,7 @@ DEFAULT_LANG = 'vi'
 PLUGIN_PATHS = ['plugins']
 PLUGINS = ['pelican-bootstrapify', 'liquid_tags.img', 'liquid_tags.video',
            'liquid_tags.youtube', 'liquid_tags.vimeo',
-           'liquid_tags.include_code']
+           'liquid_tags.include_code', 'render_math']
 
 BOOTSTRAPIFY = {
     'table': ['table', 'table-striped', 'table-hover'],
