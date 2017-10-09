@@ -12,6 +12,9 @@ Summary:
 
 update later...
 
+#### Định dạng đầu vào
+update later...
+
 #### Cách tạo Anchor  
 
 
@@ -67,6 +70,7 @@ Khi thay đổi độ co giãn của anchors thì giá trị overlap bị thay �
 #### Loss function
 
 Khi training RPN, chúng ta gán các label cho các anchor theo logic, anchor sẽ được gắn nhãn positive nếu thỏa mãn
+
 - Đó là anchors có giá trị overlap lớn nhất với một ground truth box.
 - Đó là một anchors có giá trị overlap lớn hơn 0.7 với bất kì ground-truth box nào.
 
@@ -96,19 +100,8 @@ $$ loss(x, y) = 1/n \sum \begin{cases}
 $$            
 
 
-	:::python
-	
-    bbox_targets = _compute_targets(anchors, gt_boxes[argmax_overlaps, :])
+{% include_code rpn/anchor_target_layer.py lang:python lines:208-229 :hidefilename: anchor_target_layer.py %}
 
-    bbox_inside_weights = np.zeros((len(inds_inside), 4), dtype=np.float32)
-    bbox_inside_weights[labels == 1, :] = np.array(cfg.TRAIN.RPN_BBOX_INSIDE_WEIGHTS)
-
-    bbox_outside_weights = np.zeros((len(inds_inside), 4), dtype=np.float32)
-	positive_weights = np.ones((1, 4))
-	negative_weights = np.zeros((1, 4))
-	bbox_outside_weights[labels == 1, :] = positive_weights
-	bbox_outside_weights[labels == 0, :] = negative_weights
-	
 
 
 Định ngĩa của loss function

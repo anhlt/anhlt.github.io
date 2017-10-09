@@ -12,6 +12,7 @@ services:
             - ".:/site"
         tty: true
         working_dir: /site
-        command: './develop_server.sh start 6969'
+        command: '/bin/bash'
         tty: true
+        stdin_open: true
 
