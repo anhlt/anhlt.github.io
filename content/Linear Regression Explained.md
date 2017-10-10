@@ -2,8 +2,8 @@ Title: Linear Regression Explained
 Slug: linear-regression-explained
 Date: 2017-10-05 17:57:36
 Modified: 2017-10-05 17:57:36
-Tags: explained
-Category: machinelearning, japanese
+Tags: explained, japanese
+Category: machinelearning 
 Author: h4cker
 Lang: jp
 Summary:
