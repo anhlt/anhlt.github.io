@@ -3,13 +3,13 @@ Slug: linear-regression-explained
 Date: 2017-10-05 17:57:36
 Modified: 2017-10-05 17:57:36
 Tags: explained
-Category: machinelearning
+Category: machinelearning, japanese
 Author: h4cker
 Lang: jp
 Summary:
 
 
-## Problem
+## Problem 🏟 
 
 あるファッションな会社で、かわいい女の子が多いです。入社する時、健康診断とか、IQ試験とかをしないといけないです。
 

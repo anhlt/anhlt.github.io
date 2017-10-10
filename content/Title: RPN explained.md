@@ -2,7 +2,7 @@ Title: RPN explained
 Slug: rpn-explained
 Date: 2017-10-08 03:27:29
 Modified: 2017-10-09 03:27:29
-Tags: RPN, faster_rcnn
+Tags: RPN, faster_rcnn, vietnamese, explained
 Category: Deep Learning
 Author: H4cker
 Lang: vi
@@ -93,7 +93,7 @@ Với $i$ là index của anchor trong mini-batch và $p_i$ là xác suất dự
 
 ##### Công thức tính Smooth L1
 
-$$ loss(x, y) = 1/n \sum \begin{cases}
+$$ loss(x, y) = \sum \begin{cases}
             0.5 * (x_i - y_i)^2, if |x_i - y_i| < 1 \\
             |x_i - y_i| - 0.5,   otherwise
        \end{cases} \quad

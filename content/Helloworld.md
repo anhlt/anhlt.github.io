@@ -16,6 +16,8 @@ Nội dung chủ yếu của blog này, sẽ là những vấn đề cùng mọi
 
 Gần đây tôi đang tự implement lại mô hình Faster RCNN, vì thế những bài đầu tiên về blog này sẽ viết về mô hình Faster RCNN.
 
+**Xin được lưu ý, tôi không phải là người nghiên cứu về deep learning. Tôi tốt nghiệp đại học CNTT ở Việt Nam. Sau đó đi làm luôn, tôi chỉ dành thời gian tìm hiểu deep learning trong lúc rảnh rỗi, hoặc cãi nhau với vợ sắp cưới của tôi, mọi kiến thức tôi chia sẻ ở blog này không đảm bảo hoàn toàn được tính đúng đắn.**  
+
 
 #### Hiển thị Latex trên blog
 
