@@ -2,8 +2,8 @@ Title: ExcelでLinear Regressionを調査します
 Slug: excel-linear-regression
 Date: 2017-10-11 00:35:46
 Modified: 2017-10-11 00:35:46
-Tags: 
-Category: 
+Tags: japanese, workshop
+Category: machinelearning
 Author: h4cker
 Lang: jp
 Summary:
