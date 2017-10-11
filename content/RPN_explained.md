@@ -30,12 +30,12 @@ RPN cấu tạo gồm 3 thành phần chính
 
 2. conv1
 
-  ```
-    (conv1): Conv2d (
-      (conv): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-      (relu): ReLU (inplace)
-    )
-  ```
+	  ```
+	    (conv1): Conv2d (
+	      (conv): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+	      (relu): ReLU (inplace)
+	    )
+	  ```
 
 3. output
   - input
