@@ -4,7 +4,7 @@ Date: 2017-10-08 03:27:29
 Modified: 2017-10-09 03:27:29
 Tags: RPN, faster_rcnn, vietnamese, explained
 Category: Deep Learning
-Author: H4cker
+Author: h4cker
 Lang: vi
 Summary: 
 
