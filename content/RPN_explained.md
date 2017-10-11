@@ -10,35 +10,66 @@ Summary:
 
 #### RPN
 
-update later...
+Đối với Fast RCNN , do chia sẻ tính toán giữa các region trong ảnh, tốc độ thực thực thi của thuật toán đã được giảm từ 120s mỗi ảnh xuống 2s. Phần tính toán gây ra nghẽn chính là phần đưa ra các region proposal đầu vào, chỉ có thể thực thi tuần tự trên CPU. 
 
-#### Định dạng đầu vào
-update later...
+
+
+RPN giải quyết các vấn đề trên bằng cách huấn luyện mạng neural network để đảm nhận thay vai trò của các thuật toán như selective search vốn rất chậm chạp
+
+#### Cấu trúc mạng neural network 
+
+RPN cấu tạo gồm 3 thành phần chính
+
+1. features. 
+  - input
+    + Hình ảnh nguyên bản sẽ được scale lại sao cho chiều ngắn hơn sẽ là 600px
+  - process
+    + Sử dụng các mạng VGG16, RESNET để tính toán convolution feature của ảnh tương ứng
+  - output 
+    + convolution features
+
+2. conv1
+
+  ```
+    (conv1): Conv2d (
+      (conv): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+      (relu): ReLU (inplace)
+    )
+  ```
+
+3. output
+  - input
+  - process
+  - output
+    1. score_conv
+    2. bbox_conv 
 
 #### Cách tạo Anchor  
 
 
 
 
-	:::python
-	from faster_rcnn.utils.cython_bbox import bbox_overlaps
-	
-	overlaps = bbox_overlaps(
-	    np.ascontiguousarray(box_data[:,1:], dtype=np.float),
-	    np.ascontiguousarray(origin_gt_box, dtype=np.float))
+```python
+:::python
+from faster_rcnn.utils.cython_bbox import bbox_overlaps
+
+overlaps = bbox_overlaps(
+    np.ascontiguousarray(box_data[:,1:], dtype=np.float),
+    np.ascontiguousarray(origin_gt_box, dtype=np.float))
+```
 
 
 Với scale của anchors là 
 
 	:::python
 	anchor_scales = [4, 8, 16]
-	
+
 Ta thu được kết quả sau 
 
 {% img  images/rpn/index.png 600  'Best overlap anchors' %}
 
 Với các giá trị overlap lần lượt là:
-	
+​	
 	:::python
 	array([ 0.50942772,  0.69580078,  0.81643243])
 
@@ -51,7 +82,7 @@ Với scale của anchors là
 
 	:::python
 	anchor_scales = [8, 16, 32]
-	
+
 Ta thu được kết quả sau 
 
 {% img  images/rpn/index2.png 600  'Best overlap anchors' %}
@@ -93,14 +124,20 @@ Với $i$ là index của anchor trong mini-batch và $p_i$ là xác suất dự
 
 ##### Công thức tính Smooth L1
 
-$$ loss(x, y) = \sum \begin{cases}
-            0.5 * (x_i - y_i)^2, if |x_i - y_i| < 1 \\
-            |x_i - y_i| - 0.5,   otherwise
-       \end{cases} \quad
-$$            
+$$
+loss(x, y) = \sum \begin{cases} 
+		0.5 * (x_i - y_i)^2, if |x_i - y_i| < 1 \\  
+		|x_i - y_i| - 0.5,   otherwise   
+        \end{cases} \quad
+$$
+
+{% include_code rpn/anchor_target_layer.py lang:python lines:208-227 :hidefilename: anchor_target_layer.py %}
+
+`bbox_inside_weights` tương ứng với giá trị nhãn $p_{i}^{*}$ có giá trị bằng một khi anchor tương ứng là positive anchors
+
+`bbox_outside_weights`  là hệ số để cân bằng giữa positive anchor và negative anchors  và đã nhân với giá trị  $\frac{1}{N_{reg}}$ . Trong cấu hình đưa ra thì `TRAIN.RPN_POSITIVE_WEIGHT = -1`. Lúc này giá trị hệ số là bằng nhau.
 
 
-{% include_code rpn/anchor_target_layer.py lang:python lines:208-229 :hidefilename: anchor_target_layer.py %}
 
 
 
@@ -118,7 +155,7 @@ $$
 	  loss_weight: 1
 	  smooth_l1_loss_param { sigma: 3.0 }
 	}
-	
+
 File C thực thi
 
 {% include_code rpn/smooth_L1_loss_layer.cpp lang:cpp lines:51-82 :hidefilename: smooth_L1_loss_layer.cpp %}
