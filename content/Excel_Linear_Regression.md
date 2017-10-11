@@ -89,7 +89,7 @@ $$
 {% img right images/excel_linear_regression/result.png 600 %}
 
 
-結果のインタプレスタ：
+### Result interpret
 
 
 - TV,とnewspaperを固定して、さらに１０００ドルをラジロ報告を費やすと、販売個数は約190個を増加する。
