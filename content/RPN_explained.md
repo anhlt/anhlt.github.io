@@ -82,8 +82,8 @@ $$
 
 Với $i$ là index của anchor trong mini-batch và $p_i$ là xác suất dự đoán của anchor $i$ là một đối tượng. Giá trị nhãn ground-truth $p_i^{*}$ là một nếu anchor là positive, và là không khi anchor là negative.
 
-- $t_i$ là một vector 4 chiều biểu diễn giá trị tọa độ của bounding box đã được dự đoán. 
-- $t_i^{*}$ là vectỏr 4 chiều biểu diễn giá trị tọa độ của ground-truth box tương ứng với positive anchor.
+- $t_i$  là một vector 4 chiều biểu diễn giá trị tọa độ của bounding box đã được dự đoán. 
+- $t_i^{*}$ là vector 4 chiều biểu diễn giá trị tọa độ của ground-truth box tương ứng với positive anchor.
 
 - $L_{cls}$ là log loss của 2 class (object và non-object) 
 - $L_{reg}$ dùng SmoothL1Loss
