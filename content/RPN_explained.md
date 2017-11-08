@@ -8,39 +8,54 @@ Author: h4cker
 Lang: vi
 Summary: 
 
-#### Giới thiệu về Faster RCNN
+### Giới thiệu về Faster RCNN
 
 Faster RCNN là một thuật toán để tìm kiếm vị trí của vật thể trong ảnh. Thuật toán này sẽ có đầu ra là những hình hộp, cùng với vật thể bên trong hộp đó là gì. Phiên bản đầu tiên của Faster RCNN là RCNN, với nguyên lý khá đơn giản. 
 
 ##### RCNN
 
 1. Tác giả sử dụng một thuật toán gọi là selective search để đưa ra các bounding boxes, hay còn gọi là region proposals, chứa các vùng có thể có vật thể ở trong. 
-2. Sử dụng các mạng đã được huấn luyện sẵn như Alex-net, VGG-16 để tính toán feed-forward các regions, sau đó SVM để xác định được vật thể nào được chứa trong region proposal đó. 
+2. Sử dụng các mạng đã được huấn luyện sẵn như Alex-net, VGG-16 để tính toán feed-forward các regions thu được convolutional features của mỗi region, sau đó huấn luyện SVM để xác định được vật thể nào được chứa trong region proposal đó. 
 3. Sử dụng Linear Regression để hiệu chỉnh các giá trị ( vị trí các đỉnh) của region proposer 
 
 ##### Fast RCNN
 
 1. Sử dụng các mạng huấn luyện sẵn để feed-forward các region proposals, sẽ tốn nhiều thời gian bởi với mỗi ảnh thuật toán selective search sẽ cho ra hàng nghìn region proposals. 
-2. Tác giả sẽ chỉ feed-forward một lần đối với ảnh gốc, thu được convolutional features của ảnh đó. Ví dụ với một hình cảnh có kích thước $600 * 600 * 3$, ta sẽ thu được convolutional features với kích thước $37 * 37 * 512$. Kích thước của features bị giảm nhỏ khoảng 16 lần ( $ 600  37 \approx 16 $).
+2. Tác giả sẽ chỉ feed-forward một lần đối với ảnh gốc, thu được convolutional features của ảnh đó. Ví dụ với một hình cảnh có kích thước $600 * 600 * 3$, ta sẽ thu được convolutional features với kích thước $37 * 37 * 512$. Kích thước của features bị giảm nhỏ khoảng 16 lần $600 \ 37$.
 3. Dựa vào kích thước cùng vị trí của các region proposals đối với ảnh gốc, ta sẽ tính toán được vị trí của region proposal trong convolutional features.
 4. Sửa dụng giá trị convolutional faetures của region proposal, ta dự đoán được vị trí các đỉnh của bounding box cũng như vật thể nằm trong bounding box là gì.
 
 {% img  images/rpn/fast_rcnn.png 600  'Fast RCNN' %}
 
+Source: https://www.slideshare.net/simplyinsimple/detection-52781995.
+
+Đối với Fast RCNN , do chia sẻ tính toán giữa các region trong ảnh, tốc độ thực thực thi của thuật toán đã được giảm từ 120s mỗi ảnh xuống 2s. Phần tính toán gây ra nghẽn chính là phần đưa ra các region proposal đầu vào, chỉ có thể thực thi tuần tự trên CPU. Faster RCNN giải quyết vấn đề này bằng cách sử dụng DNN để tính toán các region proposals này.
 
 
-#### RPN
 
-Đối với Fast RCNN , do chia sẻ tính toán giữa các region trong ảnh, tốc độ thực thực thi của thuật toán đã được giảm từ 120s mỗi ảnh xuống 2s. Phần tính toán gây ra nghẽn chính là phần đưa ra các region proposal đầu vào, chỉ có thể thực thi tuần tự trên CPU. 
-
-
+### RPN
 
 RPN giải quyết các vấn đề trên bằng cách huấn luyện mạng neural network để đảm nhận thay vai trò của các thuật toán như selective search vốn rất chậm chạp
 
 #### Cấu trúc mạng neural network 
 
-RPN cấu tạo gồm 3 thành phần chính
+Cách hoạt động RPN có 3 bước chính
 
+1. Feed-forward ảnh qua DNN thu được convolutional features.
+
+{% img  images/rpn/step-1.png 600  'Fast RCNN' %}
+Source: https://www.quora.com/How-does-the-region-proposal-network-RPN-in-Faster-R-CNN-work.
+
+2. Sử dụng một cửa sổ trượt lên convolution features vừa nhận được ở bước một. Với mỗi vị trí của cửa sổ trượt, chúng ta tạo ra những 9 anchors, hình vuông , hình chữ nhật tỉ lên 1x2, hình chữ nhật tỉ lệ 2x1, lần lượt với 3 kích thước x1, x2, x3 (toàn bộ kích thước đều tương ứng với kích thước của ảnh gốc)
+
+{% img  images/rpn/step-2.png 600  'Fast RCNN' %}
+Source: https://www.quora.com/How-does-the-region-proposal-network-RPN-in-Faster-R-CNN-work.
+
+Tại sao phải tạo ra những anchors này. Theo cách hiểu của bản thân tôi thì, trong bài toán xác định vị trí vật thể, số lượng đầu ra của mỗi ảnh là khác nhau. Ví dụ một bức ảnh có thể có 2 vật thể, một bức ảnh khác có 4 vật thể. Vì số lượng output là không cố định ta phải dựa vào các anchor để cố định hóa số lượng output này. 
+
+Đối với mỗi bức ảnh, ta đều sinh ra các anchors tương ứng phụ thuộc vào kích cỡ của ảnh đó, bằng cách tính giá trị overlap của anchors với ground truth boxes, ta có thể xác định được anchors đó là positive hay negative. 
+
+3. Sử dụng output ở bước 2, đưa vào một neural network nhỏ có 2 tác dụng chính, dự đoán vị trí của bounding box và dự đoán bounding box ấy có chưa vật thể hay không. Do với mỗi vị trí của cửa sổ trượt ta có 9 anchors nên đầu ra tương ứng của network này là $9*2=18$ và $9*4=36$
 
 	:::
 	RPN (
@@ -77,13 +92,16 @@ RPN cấu tạo gồm 3 thành phần chính
 	    (29): ReLU (inplace)
 	    (30): MaxPool2d (size=(2, 2), stride=(2, 2), dilation=(1, 1))
 	)
+	# Sliding window
 	(conv1): Conv2d (
 		(conv): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
 		(relu): ReLU (inplace)
 	)
+	# Score output
 	(score_conv): Conv2d (
 		(conv): Conv2d(512, 18, kernel_size=(1, 1), stride=(1, 1))
 	)
+	# bounding box output
 	(bbox_conv): Conv2d (
 		(conv): Conv2d(512, 36, kernel_size=(1, 1), stride=(1, 1)))
 	)
@@ -91,15 +109,12 @@ RPN cấu tạo gồm 3 thành phần chính
 
 #### Cách tạo Anchor  
 
-
-
 	:::python
 	from faster_rcnn.utils.cython_bbox import bbox_overlaps
 
 	overlaps = bbox_overlaps(
 		np.ascontiguousarray(box_data[:,1:], dtype=np.float),
 		np.ascontiguousarray(origin_gt_box, dtype=np.float))
-
 
 
 Với scale của anchors là 
