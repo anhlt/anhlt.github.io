@@ -1,4 +1,4 @@
-Title: RPN explained
+Title: Giải thích về mô hình Faster RCNN - Phần 1: RPN
 Slug: rpn-explained
 Date: 2017-10-08 03:27:29
 Modified: 2017-10-09 03:27:29
@@ -7,6 +7,27 @@ Category: Deep Learning
 Author: h4cker
 Lang: vi
 Summary: 
+
+#### Giới thiệu về Faster RCNN
+
+Faster RCNN là một thuật toán để tìm kiếm vị trí của vật thể trong ảnh. Thuật toán này sẽ có đầu ra là những hình hộp, cùng với vật thể bên trong hộp đó là gì. Phiên bản đầu tiên của Faster RCNN là RCNN, với nguyên lý khá đơn giản. 
+
+##### RCNN
+
+1. Tác giả sử dụng một thuật toán gọi là selective search để đưa ra các bounding boxes, hay còn gọi là region proposals, chứa các vùng có thể có vật thể ở trong. 
+2. Sử dụng các mạng đã được huấn luyện sẵn như Alex-net, VGG-16 để tính toán feed-forward các regions, sau đó SVM để xác định được vật thể nào được chứa trong region proposal đó. 
+3. Sử dụng Linear Regression để hiệu chỉnh các giá trị ( vị trí các đỉnh) của region proposer 
+
+##### Fast RCNN
+
+1. Sử dụng các mạng huấn luyện sẵn để feed-forward các region proposals, sẽ tốn nhiều thời gian bởi với mỗi ảnh thuật toán selective search sẽ cho ra hàng nghìn region proposals. 
+2. Tác giả sẽ chỉ feed-forward một lần đối với ảnh gốc, thu được convolutional features của ảnh đó. Ví dụ với một hình cảnh có kích thước $600 * 600 * 3$, ta sẽ thu được convolutional features với kích thước $37 * 37 * 512$. Kích thước của features bị giảm nhỏ khoảng 16 lần ( $ 600  37 \approx 16 $).
+3. Dựa vào kích thước cùng vị trí của các region proposals đối với ảnh gốc, ta sẽ tính toán được vị trí của region proposal trong convolutional features.
+4. Sửa dụng giá trị convolutional faetures của region proposal, ta dự đoán được vị trí các đỉnh của bounding box cũng như vật thể nằm trong bounding box là gì.
+
+{% img  images/rpn/fast_rcnn.png 600  'Fast RCNN' %}
+
+
 
 #### RPN
 

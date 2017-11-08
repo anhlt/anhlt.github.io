@@ -58,5 +58,5 @@ GOOGLE_ANALYTICS = "UA-12027115-4"
 CODE_DIR = 'code'
 
 # copy CNAME
-STATIC_PATHS = ['images', 'code', 'extra/CNAME']
+STATIC_PATHS = ['images', 'code', 'downloads', 'extra/CNAME']
 EXTRA_PATH_METADATA = {'extra/CNAME': {'path': 'CNAME'}}
