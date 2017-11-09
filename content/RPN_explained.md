@@ -92,16 +92,13 @@ Tại sao phải tạo ra những anchors này. Theo cách hiểu của bản th
 	    (29): ReLU (inplace)
 	    (30): MaxPool2d (size=(2, 2), stride=(2, 2), dilation=(1, 1))
 	)
-	# Sliding window
 	(conv1): Conv2d (
 		(conv): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
 		(relu): ReLU (inplace)
 	)
-	# Score output
 	(score_conv): Conv2d (
 		(conv): Conv2d(512, 18, kernel_size=(1, 1), stride=(1, 1))
 	)
-	# bounding box output
 	(bbox_conv): Conv2d (
 		(conv): Conv2d(512, 36, kernel_size=(1, 1), stride=(1, 1)))
 	)
@@ -167,12 +164,10 @@ Các non-positive anchors có giá trị overlap bé hơn 0.3 thì được gán
 $$
 L(\{ p_i \}, \{ t_i \}) = \frac{1}{N_{cls}} \sum_{i} L_{cls} (p_i, p_i^{*}) + \lambda \frac{1}{N_{reg}} \sum_{i} p_i^{*} L_{reg}(t_i, t_i^{*})
 $$
-
 Với $i$ là index của anchor trong mini-batch và $p_i$ là xác suất dự đoán của anchor $i$ là một đối tượng. Giá trị nhãn ground-truth $p_i^{*}$ là một nếu anchor là positive, và là không khi anchor là negative.
 
 - $t_i$  là một vector 4 chiều biểu diễn giá trị tọa độ của bounding box đã được dự đoán. 
 - $t_i^{*}$ là vector 4 chiều biểu diễn giá trị tọa độ của ground-truth box tương ứng với positive anchor.
-
 - $L_{cls}$ là log loss của 2 class (object và non-object) 
 - $L_{reg}$ dùng SmoothL1Loss
 
@@ -191,13 +186,7 @@ $$
 {% include_code rpn/anchor_target_layer.py lang:python lines:208-227 :hidefilename: anchor_target_layer.py %}
 
 `bbox_inside_weights` tương ứng với giá trị nhãn $p_{i}^{*}$ có giá trị bằng một khi anchor tương ứng là positive anchors
-
 `bbox_outside_weights`  là hệ số để cân bằng giữa positive anchor và negative anchors  và đã nhân với giá trị  $\frac{1}{N_{reg}}$ . Trong cấu hình đưa ra bởi tác giả thì `TRAIN.RPN_POSITIVE_WEIGHT = -1`. Lúc này giá trị hệ số là bằng nhau.
-
-
-
-
-
 Định ngĩa của loss function
 
 	:::
