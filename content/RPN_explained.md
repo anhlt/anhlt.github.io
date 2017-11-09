@@ -41,14 +41,19 @@ RPN giải quyết các vấn đề trên bằng cách huấn luyện mạng neu
 
 Cách hoạt động RPN có 3 bước chính
 
+
 1. Feed-forward ảnh qua DNN thu được convolutional features.
 
+
 {% img  images/rpn/step-1.png 600  'Fast RCNN' %}
+
+
 Source: https://www.quora.com/How-does-the-region-proposal-network-RPN-in-Faster-R-CNN-work.
 
 2. Sử dụng một cửa sổ trượt lên convolution features vừa nhận được ở bước một. Với mỗi vị trí của cửa sổ trượt, chúng ta tạo ra những 9 anchors, hình vuông , hình chữ nhật tỉ lên 1x2, hình chữ nhật tỉ lệ 2x1, lần lượt với 3 kích thước x1, x2, x3 (toàn bộ kích thước đều tương ứng với kích thước của ảnh gốc)
 
 {% img  images/rpn/step-2.png 600  'Fast RCNN' %}
+
 Source: https://www.quora.com/How-does-the-region-proposal-network-RPN-in-Faster-R-CNN-work.
 
 Tại sao phải tạo ra những anchors này. Theo cách hiểu của bản thân tôi thì, trong bài toán xác định vị trí vật thể, số lượng đầu ra của mỗi ảnh là khác nhau. Ví dụ một bức ảnh có thể có 2 vật thể, một bức ảnh khác có 4 vật thể. Vì số lượng output là không cố định ta phải dựa vào các anchor để cố định hóa số lượng output này. 
@@ -56,6 +61,8 @@ Tại sao phải tạo ra những anchors này. Theo cách hiểu của bản th
 Đối với mỗi bức ảnh, ta đều sinh ra các anchors tương ứng phụ thuộc vào kích cỡ của ảnh đó, bằng cách tính giá trị overlap của anchors với ground truth boxes, ta có thể xác định được anchors đó là positive hay negative. 
 
 3. Sử dụng output ở bước 2, đưa vào một neural network nhỏ có 2 tác dụng chính, dự đoán vị trí của bounding box và dự đoán bounding box ấy có chưa vật thể hay không. Do với mỗi vị trí của cửa sổ trượt ta có 9 anchors nên đầu ra tương ứng của network này là $9*2=18$ và $9*4=36$
+
+
 
 	:::
 	RPN (
