@@ -6,11 +6,15 @@ Tags: RPN, faster_rcnn, vietnamese, explained
 Category: Deep Learning
 Author: h4cker
 Lang: vi
-Summary: 
+Summary: Region Proposal Networks (RPNs)
+Toc: True
+
 
 ### Giới thiệu về Faster RCNN
 
 Faster RCNN là một thuật toán để tìm kiếm vị trí của vật thể trong ảnh. Thuật toán này sẽ có đầu ra là những hình hộp, cùng với vật thể bên trong hộp đó là gì. Phiên bản đầu tiên của Faster RCNN là RCNN, với nguyên lý khá đơn giản. 
+
+------
 
 ##### RCNN
 
@@ -35,22 +39,32 @@ Source: https://www.slideshare.net/simplyinsimple/detection-52781995.
 
 ### RPN
 
-RPN giải quyết các vấn đề trên bằng cách huấn luyện mạng neural network để đảm nhận thay vai trò của các thuật toán như selective search vốn rất chậm chạp
+RPN giải quyết các vấn đề trên bằng cách huấn luyện mạng neural network để đảm nhận thay vai trò của các thuật toán như selective search vốn rất chậm chạp.
+
+Một Region Proposal Network nhận đầu vào là ảnh với kích thước bất kì và cho đầu ra là tập vị trí của các hình chữ nhật có thể chứa vật thể, cùng với xác suất chứa vật thể của hình chữ nhật tương ứng.
+
+------
 
 #### Cấu trúc mạng neural network 
 
 Cách hoạt động RPN có 3 bước chính
 
 
-1. Feed-forward ảnh qua DNN thu được convolutional features.
+1. __Feed-forward ảnh qua DNN thu được convolutional features.__
 
+	Trong bài báo gốc, tác giả đã nhắc đến nhiều các mạng Convolution Network có sẵn như VGG-16, ZFNet, để dễ dàng cho việc giải thích, chúng ta sẽ lấy ví dụ ở đây là mạng VGG-16. 
+
+	Mạng VGG-16 chứa 13   convolutions layer kích thước $3 \times 3$ cùng với 5  max pooling layer kích thước $2 \times 2$. Khi đầu vào là một ảnh có kích thước $3 \times W \times H$ , đầu ra sẽ nhận được $3 \times W^{'} \times H^{'}$ với $W^{'} = \frac{W}{16}$ $H^{'} = \frac{H}{16}$
 
 	{% img  images/rpn/step-1.png 600  'Fast RCNN' %}
 
-
 	Source: https://www.quora.com/How-does-the-region-proposal-network-RPN-in-Faster-R-CNN-work.
 
-2. Sử dụng một cửa sổ trượt lên convolution features vừa nhận được ở bước một. Với mỗi vị trí của cửa sổ trượt, chúng ta tạo ra những 9 anchors, hình vuông , hình chữ nhật tỉ lên 1x2, hình chữ nhật tỉ lệ 2x1, lần lượt với 3 kích thước x1, x2, x3 (toàn bộ kích thước đều tương ứng với kích thước của ảnh gốc)
+2. __Sử dụng một cửa sổ trượt lên convolution features .__
+	
+ 	{% img  images/rpn/rpn.png 600  'RPN' %}
+
+	Với mỗi vị trí của cửa sổ trượt, chúng ta tạo ra những 9 anchors, hình vuông , hình chữ nhật tỉ lên 1x2, hình chữ nhật tỉ lệ 2x1, lần lượt với 3 kích thước x1, x2, x3 (toàn bộ kích thước đều tương ứng với kích thước của ảnh gốc)
 
 	{% img  images/rpn/step-2.png 600  'Fast RCNN' %}
 
@@ -59,10 +73,6 @@ Cách hoạt động RPN có 3 bước chính
 	Tại sao phải tạo ra những anchors này. Theo cách hiểu của bản thân tôi thì, trong bài toán xác định vị trí vật thể, số lượng đầu ra của mỗi ảnh là khác nhau. Ví dụ một bức ảnh có thể có 2 vật thể, một bức ảnh khác có 4 vật thể. Vì số lượng output là không cố định ta phải dựa vào các anchor để cố định hóa số lượng output này. 
 
 	Đối với mỗi bức ảnh, ta đều sinh ra các anchors tương ứng phụ thuộc vào kích cỡ của ảnh đó, bằng cách tính giá trị overlap của anchors với ground truth boxes, ta có thể xác định được anchors đó là positive hay negative. 
-
-3. Sử dụng output ở bước 2, đưa vào một neural network nhỏ có 2 tác dụng chính, dự đoán vị trí của bounding box và dự đoán bounding box ấy có chưa vật thể hay không. Do với mỗi vị trí của cửa sổ trượt ta có 9 anchors nên đầu ra tương ứng của network này là $9*2=18$ và $9*4=36$
-
-
 
 
 
@@ -113,49 +123,49 @@ Cách hoạt động RPN có 3 bước chính
 		)
 
 
-#### Cách tạo Anchor  
+3. __Anchor__  
 
-	:::python
-	from faster_rcnn.utils.cython_bbox import bbox_overlaps
+		:::python
+		from faster_rcnn.utils.cython_bbox import bbox_overlaps
 
-	overlaps = bbox_overlaps(
-		np.ascontiguousarray(box_data[:,1:], dtype=np.float),
-		np.ascontiguousarray(origin_gt_box, dtype=np.float))
-
-
-Với scale của anchors là 
-
-	:::python
-	anchor_scales = [4, 8, 16]
-
-Ta thu được kết quả những anchor có overlap tốt nhất như sau 
-
-{% img  images/rpn/index.png 600  'Best overlap anchors' %}
-
-Hình hộp màu đỏ là ground truth boxes, các anchors tạo ra có màu xanh
-
-Với các giá trị overlap lần lượt là:
-​   
-
-	:::python
-	array([ 0.50942772,  0.69580078,  0.81643243])
+		overlaps = bbox_overlaps(
+			np.ascontiguousarray(box_data[:,1:], dtype=np.float),
+			np.ascontiguousarray(origin_gt_box, dtype=np.float))
 
 
-Ảnh test thử anchor và groud boxes
+	Với scale của anchors là 
 
-Với scale của anchors là 
+		:::python
+		anchor_scales = [4, 8, 16]
 
-	:::python
-	anchor_scales = [8, 16, 32]
+	Ta thu được kết quả những anchor có overlap tốt nhất như sau 
 
-Ta thu được kết quả sau 
+	{% img  images/rpn/index.png 600  'Best overlap anchors' %}
 
-{% img  images/rpn/index2.png 600  'Best overlap anchors' %}
+	Hình hộp màu đỏ là ground truth boxes, các anchors tạo ra có màu xanh
 
-Với các giá trị overlap lần lượt là:
+	Với các giá trị overlap lần lượt là:
+	​   
 
-	:::python   
-	array([ 0.33923037,  0.69580078,  0.81643243])
+		:::python
+		array([ 0.50942772,  0.69580078,  0.81643243])
+
+
+	Ảnh test thử anchor và groud boxes
+
+	Với scale của anchors là 
+
+		:::python
+		anchor_scales = [8, 16, 32]
+
+	Ta thu được kết quả sau 
+
+	{% img  images/rpn/index2.png 600  'Best overlap anchors' %}
+
+	Với các giá trị overlap lần lượt là:
+
+		:::python   
+		array([ 0.33923037,  0.69580078,  0.81643243])
 
 
 ##### Nhận xét 

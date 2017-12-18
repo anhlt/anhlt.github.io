@@ -104,6 +104,8 @@
 
   <div class="main">
     <div class="container">
+      {% block toc %}{% endblock %}
+      
       <h1>{% block page_header %}{% endblock %}</h1>
       <hr>
       {% block content %}{% endblock %}

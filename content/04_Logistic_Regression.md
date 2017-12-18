@@ -10,6 +10,8 @@ Summary: logistic regressionについて説明します
 
 ### 事例
 
+- why using probability?
+
 Wikipediaから勉強時間と試験を合格するの関係の事例を使います。
 
 モデルの体育のデータベースがあります。

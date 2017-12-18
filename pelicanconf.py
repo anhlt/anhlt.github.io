@@ -16,7 +16,7 @@ DEFAULT_LANG = 'vi'
 PLUGIN_PATHS = ['plugins']
 PLUGINS = ['pelican-bootstrapify', 'liquid_tags.img', 'liquid_tags.video',
            'liquid_tags.youtube', 'liquid_tags.vimeo',
-           'liquid_tags.include_code', 'render_math']
+           'liquid_tags.include_code', 'render_math', 'pelican-toc']
 
 BOOTSTRAPIFY = {
     'table': ['table', 'table-striped', 'table-hover'],
@@ -24,12 +24,13 @@ BOOTSTRAPIFY = {
     'blockquote': ['blockquote'],
 }
 
-DIRECT_TEMPLATES = ['index', 'tags', 'categories', 'authors', 'archives', 'sitemap']
+DIRECT_TEMPLATES = ['index', 'tags', 'categories',
+                    'authors', 'archives', 'sitemap']
 SITEMAP_SAVE_AS = 'sitemap.xml'
 
 # Theme
 THEME = 'themes/alchemy/alchemy'
-SITESUBTITLE = 'Hành trình đi lấy vợ \u2728 à nhầm, hành trình học deep learning'
+SITESUBTITLE = '\u2728 Hành trình học deep learning'
 
 
 # Feed generation is usually not desired when developing
@@ -50,7 +51,7 @@ SOCIAL = (('Twitter', 'https://twitter.com/tuananh_bk'),)
 DEFAULT_PAGINATION = 10
 
 # Uncomment following line if you want document-relative URLs when developing
-# RELATIVE_URLS = True
+RELATIVE_URLS = True
 DISQUS_SITENAME = "deepmlml"
 GOOGLE_ANALYTICS = "UA-12027115-4"
 
@@ -60,3 +61,16 @@ CODE_DIR = 'code'
 # copy CNAME
 STATIC_PATHS = ['images', 'code', 'downloads', 'extra/CNAME']
 EXTRA_PATH_METADATA = {'extra/CNAME': {'path': 'CNAME'}}
+
+
+TOC = {
+    'TOC_HEADERS': '^h[1-6]',  # What headers should be included in
+    # the generated toc
+    # Expected format is a regular expression
+
+    'TOC_RUN': 'true',    # Default value for toc generation,
+    # if it does not evaluate
+    # to 'true' no toc will be generated
+
+    'TOC_INCLUDE_TITLE': 'false',     # If 'true' include title in toc
+}
