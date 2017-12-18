@@ -16,13 +16,13 @@ Faster RCNN là một thuật toán để tìm kiếm vị trí của vật th�
 
 ------
 
-##### RCNN
+#### RCNN
 
 1. Tác giả sử dụng một thuật toán gọi là selective search để đưa ra các bounding boxes, hay còn gọi là region proposals, chứa các vùng có thể có vật thể ở trong. 
 2. Sử dụng các mạng đã được huấn luyện sẵn như Alex-net, VGG-16 để tính toán feed-forward các regions thu được convolutional features của mỗi region, sau đó huấn luyện SVM để xác định được vật thể nào được chứa trong region proposal đó. 
 3. Sử dụng Linear Regression để hiệu chỉnh các giá trị ( vị trí các đỉnh) của region proposer 
 
-##### Fast RCNN
+#### Fast RCNN
 
 1. Sử dụng các mạng huấn luyện sẵn để feed-forward các region proposals, sẽ tốn nhiều thời gian bởi với mỗi ảnh thuật toán selective search sẽ cho ra hàng nghìn region proposals. 
 2. Tác giả sẽ chỉ feed-forward một lần đối với ảnh gốc, thu được convolutional features của ảnh đó. Ví dụ với một hình ảnh có kích thước $600 * 600 * 3$, ta sẽ thu được convolutional features với kích thước $37 * 37 * 512$. Kích thước của features bị giảm nhỏ khoảng 16 lần $\frac{600}{37}$.
@@ -41,13 +41,13 @@ Source: https://www.slideshare.net/simplyinsimple/detection-52781995.
 
 RPN giải quyết các vấn đề trên bằng cách huấn luyện mạng neural network để đảm nhận thay vai trò của các thuật toán như selective search vốn rất chậm chạp.
 
-Một Region Proposal Network nhận đầu vào là ảnh với kích thước bất kì và cho đầu ra là tập vị trí của các hình chữ nhật có thể chứa vật thể, cùng với xác suất chứa vật thể của hình chữ nhật tương ứng.
+Một Region Proposal Network nhận đầu vào là ảnh với kích thước bất kì và cho đầu ra là region proposal (tập vị trí của các hình chữ nhật có thể chứa vật thể), cùng với xác suất chứa vật thể của hình chữ nhật tương ứng.
 
 ------
 
-#### Cấu trúc mạng neural network 
+#### Cấu trúc
 
-Cách hoạt động RPN có 3 bước chính
+Cách hoạt động RPN có 2 bước chính
 
 
 1. __Feed-forward ảnh qua DNN thu được convolutional features.__
@@ -60,13 +60,13 @@ Cách hoạt động RPN có 3 bước chính
 
 	Source: https://www.quora.com/How-does-the-region-proposal-network-RPN-in-Faster-R-CNN-work.
 
-2. __Sử dụng một cửa sổ trượt lên convolution features .__
+2. __Sử dụng một cửa sổ trượt lên convolutional features .__
 	
  	{% img  images/rpn/rpn.png 600  'RPN' %}
 
-	Với mỗi vị trí của cửa sổ trượt, chúng ta tạo ra những 9 anchors, hình vuông , hình chữ nhật tỉ lên 1x2, hình chữ nhật tỉ lệ 2x1, lần lượt với 3 kích thước x1, x2, x3 (toàn bộ kích thước đều tương ứng với kích thước của ảnh gốc)
+	Để tạo ra region proposals, chúng ta sử dụng một network hay còn gọi là cửa sổ trượt (sliding-window) kích thước $n \times n$ trượt trên convolutional features. Đầu ra của network này là đầu vào của 2 fully-connected layer dự đoán vị trí của regions (box-regression layer), cũng như xác suất chứa object(box-classification) của hộp ấy. Tại mỗi vị trí của cửa sổ trượt chúng ta dự đoán đồng thời nhiều nhiều region proposal cùng một lúc, gọi $k$ là số proposal tương ứng với mỗi vị trí. Vậy $reg$ layer có $4k$ đầu ra dự đoán vị trí của $k$ proposal,  $cls$ layer chứa $2k$ đầu ra dự đoán xác suất chứa vật thể của proposal.
+	
 
-	{% img  images/rpn/step-2.png 600  'Fast RCNN' %}
 
 	Source: https://www.quora.com/How-does-the-region-proposal-network-RPN-in-Faster-R-CNN-work.
 
@@ -123,64 +123,38 @@ Cách hoạt động RPN có 3 bước chính
 		)
 
 
-3. __Anchor__  
+#### Anchors
 
-		:::python
-		from faster_rcnn.utils.cython_bbox import bbox_overlaps
+{% img  images/rpn/anchors.png 600  'RPN' %}
 
-		overlaps = bbox_overlaps(
-			np.ascontiguousarray(box_data[:,1:], dtype=np.float),
-			np.ascontiguousarray(origin_gt_box, dtype=np.float))
+Sau khi đã có đầu ra của các region proposal, chúng ta sẽ tìm hiểu về khái niệm anchors. Tại mỗi vị trí của sliding window trên convolutional features, chúng ta tạo ra $k$ anchors tương ứng ở hình ảnh gốc. Trong bài báo, tác giả sử dụng 1 hình vuông, 2 hình chữ nhật với tỉ lệ chiều rộng, chiều dài là 1-2, 2-1, cùng với 3 kích cỡ khác nhau, như vậy $k = 3 \times 3 = 9$. 
 
+Các anchors này sẽ được gán mác là positive hoặc negative dựa vào diện tích overlap với ground truth box theo luật như sau.
 
-	Với scale của anchors là 
+- Các anchor được phân loại là positive nếu
+	+ Là anchor có  tỉ lệ diện tích chồng chéo trên diện tích chồng chập (Intersection-over-
+Union - viết tắt IoU) overlap lớn nhất với một ground truth box.
+	+ Là anchor có  tỉ lệ IoU với một ground truth lớn hơn 0.7
 
-		:::python
-		anchor_scales = [4, 8, 16]
-
-	Ta thu được kết quả những anchor có overlap tốt nhất như sau 
-
-	{% img  images/rpn/index.png 600  'Best overlap anchors' %}
-
-	Hình hộp màu đỏ là ground truth boxes, các anchors tạo ra có màu xanh
-
-	Với các giá trị overlap lần lượt là:
-	​   
-
-		:::python
-		array([ 0.50942772,  0.69580078,  0.81643243])
+- Các anchor được phân noại là negative nếu có giá trị IoU bé hơn 0.3
+- Các anchor không thỏa mãn 2 điều kiện nêu trên thì bỏ qua. Không được đánh giá trong quá trình training object.
 
 
-	Ảnh test thử anchor và groud boxes
+__Tại sao phải tạo ra những anchors này__. Câu trả lời gồm 2 nguyên nhân chính
 
-	Với scale của anchors là 
+1. Dựa phân loại của anchor, để dự đoán xác suất chứa vật thể của các region proposal
+2. Dựa vào khoảng cách từ anchor đến ground truth box, để dự đoán vị trí của bounding box. 
 
-		:::python
-		anchor_scales = [8, 16, 32]
+Từ đây ta xác định được tiêu đầu ra của *box-regression layer* và *box-classification* được nhắc tới ở phần cấu trúc mạng RPN. 
 
-	Ta thu được kết quả sau 
-
-	{% img  images/rpn/index2.png 600  'Best overlap anchors' %}
-
-	Với các giá trị overlap lần lượt là:
-
-		:::python   
-		array([ 0.33923037,  0.69580078,  0.81643243])
+- Box-classification dự đoán xác suất chứa vật thể của $k$ region proposal, tương ứng với $k$ anchor tại từng vị trí của sliding-window.
+- Box-regression dự đoán khoảng cách tư anchor đến ground truth box tương ứng.
 
 
-##### Nhận xét 
 
-Khi thay đổi độ co giãn của anchors thì giá trị overlap bị thay đổi nhiều. Tùy vào dataset để thay đổi scale phù hợp        
+### Loss function
 
-
-#### Loss function
-
-Khi training RPN, chúng ta gán các label cho các anchor theo logic, anchor sẽ được gắn nhãn positive nếu thỏa mãn
-
-- Đó là anchors có giá trị overlap lớn nhất với một ground truth box.
-- Đó là một anchors có giá trị overlap lớn hơn 0.7 với bất kì ground-truth box nào.
-
-Các non-positive anchors có giá trị overlap bé hơn 0.3 thì được gán là negative anchor.Với cách gán các anchor nêu trên. Loss function sẽ được định nghĩa theo công thức sau 
+Loss function sẽ được định nghĩa theo công thức sau 
 
 $$
 L(\{ p_i \}, \{ t_i \}) = \frac{1}{N_{cls}} \sum_{i} L_{cls} (p_i, p_i^{*}) + \lambda \frac{1}{N_{reg}} \sum_{i} p_i^{*} L_{reg}(t_i, t_i^{*})
@@ -195,7 +169,7 @@ Với $i$ là index của anchor trong mini-batch và $p_i$ là xác suất dự
 
 
 
-##### Công thức tính Smooth L1
+#### Công thức tính Smooth L1
 
 $$
 loss(x, y) = \sum \begin{cases} 
@@ -223,11 +197,12 @@ $$
 	  smooth_l1_loss_param { sigma: 3.0 }
 	}
 
-File C thực thi
+### Lời kết
 
-{% include_code rpn/smooth_L1_loss_layer.cpp lang:cpp lines:51-82 :hidefilename: smooth_L1_loss_layer.cpp %}
+Tôi đã gặp khó khăn rất nhiều khi tìm hiểu lý thuyết cũng như cách huấn luyện mạng Faster RCNN. Bài viết này nhằm chia sẻ những điều tôi đã học được cũng như cách tôi đã viết lại Faster RCNN bằng pytorch như thế nào. 
+Bạn có thể tham khảo tại github của tôi. [pytorch faster rcnn](https://github.com/anhlt/faster_rcnn)
 
 
-#### Trích Dẫn
+### Trích Dẫn
 
 1. ["How-does-RPN-work-on-the-Faster-R-CNN"](https://www.quora.com/How-does-RPN-work-on-the-Faster-R-CNN?no_redirect=1 "How-does-RPN-work-on-the-Faster-R-CNN")
