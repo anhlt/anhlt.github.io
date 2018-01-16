@@ -64,7 +64,7 @@ Cách hoạt động RPN có 2 bước chính
 	
  	{% img  images/rpn/rpn.png 600  'RPN' %}
 
-	Để tạo ra region proposals, chúng ta sử dụng một network hay còn gọi là cửa sổ trượt (sliding-window) kích thước $n \times n$ trượt trên convolutional features. Đầu ra của network này là đầu vào của 2 fully-connected layer dự đoán vị trí của regions (box-regression layer), cũng như xác suất chứa object(box-classification) của hộp ấy. Tại mỗi vị trí của cửa sổ trượt chúng ta dự đoán đồng thời nhiều nhiều region proposal cùng một lúc, gọi $k$ là số proposal tương ứng với mỗi vị trí. Vậy $reg$ layer có $4k$ đầu ra dự đoán vị trí của $k$ proposal,  $cls$ layer chứa $2k$ đầu ra dự đoán xác suất chứa vật thể của proposal.
+	Để tạo ra region proposals, chúng ta sử dụng một network hay còn gọi là cửa sổ trượt (sliding-window) kích thước $n \times n$ trượt trên convolutional features. Đầu ra của network này là đầu vào của 2 fully-connected layer dự đoán vị trí của regions (box-regression layer), cũng như xác suất chứa object(box-classification) của hộp ấy. Tại mỗi vị trí của cửa sổ trượt chúng ta dự đoán đồng thời nhiều nhiều region proposal cùng một lúc, với $k$ là số proposal tương ứng với mỗi vị trí. Vậy $reg$ layer có $4k$ đầu ra dự đoán vị trí của $k$ proposal,  $cls$ layer chứa $2k$ đầu ra dự đoán xác suất chứa vật thể của proposal.
 	
 
 

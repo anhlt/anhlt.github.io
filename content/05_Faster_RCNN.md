@@ -1,5 +1,5 @@
 Title: Giải thích về mô hình Faster RCNN - Phần 2: Fast RCNN
-Slug: rpn-explained
+Slug: faster-rcnn-explained
 Date: 2018-01-14 12:17:14
 Modified: 2018-01-14 12:17:14
 Tags:  fast_rcnn, faster_rcnn, vietnamese, explained, object_detection
