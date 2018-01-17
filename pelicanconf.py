@@ -52,8 +52,8 @@ DEFAULT_PAGINATION = 10
 
 # Uncomment following line if you want document-relative URLs when developing
 RELATIVE_URLS = True
-# DISQUS_SITENAME = "deepmlml"
-# GOOGLE_ANALYTICS = "UA-12027115-4"
+DISQUS_SITENAME = "deepmlml"
+GOOGLE_ANALYTICS = "UA-12027115-4"
 
 # liquid tag
 CODE_DIR = 'code'
