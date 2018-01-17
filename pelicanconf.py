@@ -46,7 +46,7 @@ LINKS = (('Machine Learning Cơ Bản', 'http://machinelearningcoban.com/'),
          ('Pytorch', 'http://pytorch.org/'),)
 
 # Social widget
-SOCIAL = (('Twitter', 'https://twitter.com/tuananh_bk'),)
+SOCIAL = (('Facebook', 'https://www.facebook.com/deepmlml/'),)
 
 DEFAULT_PAGINATION = 10
 
