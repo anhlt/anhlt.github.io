@@ -51,7 +51,7 @@ SOCIAL = (('Facebook', 'https://www.facebook.com/deepmlml/'),)
 DEFAULT_PAGINATION = 10
 
 # Uncomment following line if you want document-relative URLs when developing
-RELATIVE_URLS = True
+RELATIVE_URLS = False
 DISQUS_SITENAME = "deepmlml"
 GOOGLE_ANALYTICS = "UA-12027115-4"
 
