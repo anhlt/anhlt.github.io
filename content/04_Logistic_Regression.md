@@ -7,6 +7,8 @@ Category: machinelearning
 Author: h4cker
 Lang: jp
 Summary: logistic regressionについて説明します
+Status: draft
+
 
 ### 事例
 

@@ -34,7 +34,7 @@ SITESUBTITLE = '\u2728 Hành trình học deep learning'
 
 
 # Feed generation is usually not desired when developing
-FEED_ALL_ATOM = None
+FEED_ALL_ATOM = 'feeds/all.atom.xml'
 CATEGORY_FEED_ATOM = None
 TRANSLATION_FEED_ATOM = None
 AUTHOR_FEED_ATOM = None
@@ -52,8 +52,8 @@ DEFAULT_PAGINATION = 10
 
 # Uncomment following line if you want document-relative URLs when developing
 RELATIVE_URLS = True
-DISQUS_SITENAME = "deepmlml"
-GOOGLE_ANALYTICS = "UA-12027115-4"
+# DISQUS_SITENAME = "deepmlml"
+# GOOGLE_ANALYTICS = "UA-12027115-4"
 
 # liquid tag
 CODE_DIR = 'code'

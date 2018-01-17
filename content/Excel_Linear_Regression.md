@@ -7,6 +7,8 @@ Category: machinelearning
 Author: h4cker
 Lang: jp
 Summary:
+Status: draft
+
 
 ### Dataset
 
