@@ -47,6 +47,7 @@
   <link rel="stylesheet" href="{{ SITEURL }}/theme/css/font-awesome.min.css">
   <link rel="stylesheet" href="{{ SITEURL }}/theme/css/pygments/{{ PYGMENTS_STYLE|default('default') }}.min.css">
   <link rel="stylesheet" href="{{ SITEURL }}/theme/css/style.css">
+  <script async defer src="https://buttons.github.io/buttons.js"></script>
 
   <script async src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
   <script>
@@ -78,6 +79,8 @@
           {% endif %}
           {% if LINKS or (DISPLAY_PAGES_ON_MENU and PAGES) or ICONS %}
           <ul class="list-inline">
+            <li class="list-inline-item"><!-- Place this tag where you want the button to render. -->
+                <a class="github-button" href="https://github.com/anhlt/deepmlml" data-icon="octicon-star" data-size="large" data-show-count="true" aria-label="Star anhlt/deepmlml on GitHub">Star</a></li>
             {% for title, link in LINKS %}
             <li class="list-inline-item"><a href="{{ link }}" target="_blank">{{ title }}</a></li>
             {% endfor %}
