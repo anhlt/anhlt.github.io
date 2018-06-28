@@ -1,4 +1,4 @@
-Title: Giải thích về mô hình Faster RCNN - Phần 2: RPN - Giai thich code bang pytorch
+Title: Giải thích về mô hình Faster RCNN - Phần 2: RPN - giải thích code bằng pytorch 
 Slug: rpn-explained-code-pytorch
 Date: 2018-06-28 03:27:29
 Category: Deep Learning
