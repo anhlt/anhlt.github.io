@@ -3,7 +3,7 @@ branches:
   only:
   - master
 install:
-- pip install pelican Markdown ghp-import ipython beautifulsoup4 typogrify
+- pip install pelican Markdown ghp-import ipython beautifulsoup4 typogrify nbconvert
 script:
 - make publish
 - make github 

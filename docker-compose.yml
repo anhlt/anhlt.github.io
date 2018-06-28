@@ -5,6 +5,7 @@ services:
         build: 
             context: .
             dockerfile : Dockerfile
+        container_name: deepml
         image: blog:latest 
         ports:
             - "6969:6969"

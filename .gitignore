@@ -76,3 +76,5 @@ sftp-config.json
 
 # Pelican
 output/*
+srv.pid
+pelican.pid
