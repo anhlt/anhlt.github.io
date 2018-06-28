@@ -16,7 +16,7 @@ DEFAULT_LANG = 'vi'
 PLUGIN_PATHS = ['plugins']
 PLUGINS = ['pelican-bootstrapify', 'liquid_tags.img', 'liquid_tags.video',
            'liquid_tags.youtube', 'liquid_tags.vimeo',
-           'liquid_tags.include_code', 'render_math']
+           'liquid_tags.include_code', 'render_math', 'ipynb.liquid']
 
 BOOTSTRAPIFY = {
     'table': ['table', 'table-striped', 'table-hover'],
