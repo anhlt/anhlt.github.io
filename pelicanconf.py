@@ -64,7 +64,7 @@ EXTRA_PATH_METADATA = {'extra/CNAME': {'path': 'CNAME'}}
 
 
 TOC = {
-    'TOC_HEADERS': '^h[1-6]',  # What headers should be included in
+    'TOC_HEADERS': '^h[1-3]',  # What headers should be included in
     # the generated toc
     # Expected format is a regular expression
 
