@@ -10,11 +10,16 @@ Summary: Region Proposal Networks (RPNs)
 Toc: True
 
 
+
+
 ### Giới thiệu về Faster RCNN
 
 Faster RCNN là một thuật toán để tìm kiếm vị trí của vật thể trong ảnh. Thuật toán này sẽ có đầu ra là những hình hộp, cùng với vật thể bên trong hộp đó là gì. Phiên bản đầu tiên của Faster RCNN là RCNN, với nguyên lý khá đơn giản. 
 
+[Phần 2: Giải thích RCNN bằng Pytorch](/rpn-explained-code-pytorch.html)
+
 ------
+
 
 #### RCNN
 
