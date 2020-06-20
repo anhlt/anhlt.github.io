@@ -1,5 +1,5 @@
 Title: Bài toán Object Detection cổ điển
-Slug: classic-object-detection
+Slug: End-t-End-transformer-classic-object-detection
 Date: 2020-06-16 19:18:33
 Modified: 2020-06-16 19:18:33
 Tags: vietnamese, explained, object_detection, transfomer
