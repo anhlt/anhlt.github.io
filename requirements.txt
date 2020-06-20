@@ -1,0 +1,7 @@
+pelican 
+Markdown 
+ghp-import 
+ipython 
+beautifulsoup4 
+typogrify 
+nbconvert
