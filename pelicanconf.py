@@ -15,8 +15,7 @@ DEFAULT_LANG = 'vi'
 # Plugin
 PLUGIN_PATHS = ['plugins']
 
-from pelican_jupyter import liquid as nb_liquid
-PLUGINS = ['pelican-bootstrapify', 'liquid_tags.notebook', nb_liquid, 'liquid_tags.img', 'liquid_tags.video',
+PLUGINS = ['pelican-bootstrapify', 'liquid_tags.img', 'liquid_tags.video',
            'liquid_tags.youtube',
            'liquid_tags.include_code', 'render_math', 'pelican-toc']
 
