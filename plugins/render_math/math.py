@@ -76,9 +76,11 @@ def process_settings(pelicanobj):
     mathjax_settings['mathjax_font'] = 'default'  # forces mathjax to use the specified font.
     mathjax_settings['process_summary'] = BeautifulSoup is not None  # will fix up summaries if math is cut off. Requires beautiful soup
     mathjax_settings['message_style'] = 'normal'  # This value controls the verbosity of the messages in the lower left-hand corner. Set it to "none" to eliminate all messages
+    mathjax_settings['font_list'] = ['STIX', 'TeX'] # Include in order of preference among TeX, STIX-Web, Asana-Math, Neo-Euler, Gyre-Pagella, Gyre-Termes and Latin-Modern
+    mathjax_settings['equation_numbering'] = 'none' # AMS, auto, none
 
     # Source for MathJax
-    mathjax_settings['source'] = "'https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML'"
+    mathjax_settings['source'] = "'https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.3/latest.js?config=TeX-AMS-MML_HTMLorMML'"
 
     # Get the user specified settings
     try:
@@ -181,13 +183,22 @@ def process_settings(pelicanobj):
 
             mathjax_settings[key] = value
 
+        if key == 'font_list' and isinstance(value, list):
+            # make an array string from the list
+            value = filter(lambda string: isinstance(string, string_type), value)
+            value = map(lambda string: ",'%s'" % string, value)
+            mathjax_settings[key] = ''.join(value)[1:]
+
+        if key == 'equation_numbering':
+            mathjax_settings[key] = value if value is not None else 'none'
+
     return mathjax_settings
 
 def process_summary(article):
     """Ensures summaries are not cut off. Also inserts
     mathjax script so that math will be rendered"""
 
-    summary = article._get_summary()
+    summary = article.summary
     summary_parsed = BeautifulSoup(summary, 'html.parser')
     math = summary_parsed.find_all(class_='math')
 
@@ -198,6 +209,12 @@ def process_summary(article):
             full_text = content_parsed.find_all(class_='math')[len(math)-1].get_text()
             math[-1].string = "%s ..." % full_text
             summary = summary_parsed.decode()
+
+        # clear memoization cache
+        import functools
+        if isinstance(article.get_summary, functools.partial):
+            memoize_instance = article.get_summary.func.__self__
+            memoize_instance.cache.clear()
 
         article._summary = "%s<script type='text/javascript'>%s</script>" % (summary, process_summary.mathjax_script)
 
@@ -264,10 +281,10 @@ def mathjax_for_markdown(pelicanobj, mathjax_script, mathjax_settings):
         sys.stderr.write("\nError - the pelican mathjax markdown extension failed to configure. MathJax is non-functional.\n")
         sys.stderr.flush()
 
-def mathjax_for_rst(pelicanobj, mathjax_script):
+def mathjax_for_rst(pelicanobj, mathjax_script, mathjax_settings):
     """Setup math for RST"""
     docutils_settings = pelicanobj.settings.get('DOCUTILS_SETTINGS', {})
-    docutils_settings['math_output'] = 'MathJax'
+    docutils_settings.setdefault('math_output', 'MathJax %s' % mathjax_settings['source'])
     pelicanobj.settings['DOCUTILS_SETTINGS'] = docutils_settings
     rst_add_mathjax.mathjax_script = mathjax_script
 
@@ -292,7 +309,7 @@ def pelican_init(pelicanobj):
         mathjax_for_markdown(pelicanobj, mathjax_script, mathjax_settings)
 
     # Configure Mathjax For RST
-    mathjax_for_rst(pelicanobj, mathjax_script)
+    mathjax_for_rst(pelicanobj, mathjax_script, mathjax_settings)
 
     # Set process_summary's mathjax_script variable
     process_summary.mathjax_script = None
@@ -340,6 +357,8 @@ def process_rst_and_summaries(content_generators):
                     process_summary(article)
         elif isinstance(generator, generators.PagesGenerator):
             for page in generator.pages:
+                rst_add_mathjax(page)
+            for page in generator.hidden_pages:
                 rst_add_mathjax(page)
 
 def register():
