@@ -15,7 +15,7 @@ DEFAULT_LANG = 'vi'
 # Plugin
 PLUGIN_PATHS = ['plugins']
 PLUGINS = ['pelican-bootstrapify', 'liquid_tags.img', 'liquid_tags.video',
-           'liquid_tags.youtube', 'liquid_tags.vimeo'
+           'liquid_tags.youtube',
            'liquid_tags.include_code', 'render_math', 'ipynb.liquid', 'pelican-toc']
 
 BOOTSTRAPIFY = {
