@@ -1,61 +1,142 @@
-# pelican-alchemy
+# Pelican Alchemy
 
-Alchemy ✨ is a functional, clean, responsive theme for the [Pelican](http://getpelican.com) static site generator. It is heavily inspired by [crowsfoot](http://github.com/porterjamesj/crowsfoot), [clean-blog](https://github.com/BlackrockDigital/startbootstrap-clean-blog), and powered by [Bootstrap](https://github.com/twbs/bootstrap). Pull requests are welcome!
+> A magical ✨ Pelican theme
 
-[Demo](https://nairobilug.github.io/pelican-alchemy/)!
+Alchemy is a functional, clean, responsive theme for the [Pelican](http://getpelican.com) static site generator.
 
-## Screenshot
+Inspired by [crowsfoot](http://github.com/porterjamesj/crowsfoot) and [clean-blog](https://github.com/BlackrockDigital/startbootstrap-clean-blog), it features:
 
-![Screenshot](screenshot.jpg "Screenshot")
-
-## Features
-
-- Bootstap 4 (currently v4.0.0-alpha.5)
-- Core Pygments [styles](http://pygments.org/demo/)
-- External analytics (Google Analytics, Gauges, Piwik)
-- External comments (Disqus)
-- Font Awesome font icons
-- No external dependencies
-- No JavaScript (excl. Analytics & Comments)
+- Powered by [Bootstrap 4](https://getbootstrap.com/) (v4.3.1)
+- Supports any [Boostwatch](https://bootswatch.com/) themes
+- [Font Awesome](http://fontawesome.io/) icons
+- [Pygments](http://pygments.org/) syntax highlighting styles
 - Pelican `sitemap.xml` support
-- realfavicongenerator [package](http://realfavicongenerator.net/blog/new-favicon-package-less-is-more/) support
-- Simple Jinja2 templates
+- [Favicon Generator](http://realfavicongenerator.net/) support
+- External analytics ([Google](https://analytics.google.com), [Gauges](https://gaug.es), [Piwik](https://piwik.org)) support **
+- External comments ([Disqus](https://disqus.com)) support **
+
+** Features link to external assets (webfonts etc).
+
+## Screenshots
+
+<table>
+<tr>
+  <td colspan="2">
+    <a href="screenshots/default.png">
+      <img src="screenshots/default.png"/>
+      <p align="center">Default colors</p>
+    </a>
+  </td>
+</tr>
+<tr>
+  <td>
+    <a href="screenshots/oldstyle.png">
+      <img src="screenshots/oldstyle.png"/>
+      <p align="center">Old style (see below)</p>
+    </a>
+  </td>
+  <td>
+    <a href="screenshots/sketchy.png">
+      <img src="screenshots/sketchy.png"/>
+      <p align="center">Sketchy (Boostwatch)</p>
+    </a>
+  </td>
+</tr>
+<tr>
+  <td>
+    <a href="screenshots/solar.png">
+      <img src="screenshots/solar.png"/>
+      <p align="center">Solar (Boostwatch)</p>
+    </a>
+  </td>
+  <td>
+    <a href="screenshots/united.png">
+      <img src="screenshots/united.png"/>
+      <p align="center">United (Boostwatch)</p>
+    </a>
+  </td>
+</tr>
+</table>
+
+> To enable old visual style add `THEME_CSS_OVERRIDES = ['theme/css/oldstyle.css']`
+> to your `pelicanconf.py` and use no Boostwatch themes.
+> See [stylesheet](alchemy/static/css/oldstyle.css) for more information.
 
 ## Installation
 
-First, clone the repo:
+### From Git repo
 
-    $ git clone git@github.com:nairobilug/pelican-alchemy.git
+Clone the repo:
 
-Then point the `THEME` variable in your Pelican config to the `alchemy` folder:
+```bash
+git clone https://github.com/nairobilug/pelican-alchemy
+```
 
-    THEME = '/path/to/pelican-alchemy/alchemy'
+Set the `THEME` variable in your Pelican config:
+
+```python
+THEME = '<PATH_TO_REPO>/alchemy'
+```
 
 ### As a Submodule
 
 In your Pelican site:
 
-    $ mkdir themes
-    $ git submodule add https://github.com/nairobilug/pelican-alchemy themes/pelican-alchemy
+```bash
+mkdir themes
+git submodule add https://github.com/nairobilug/pelican-alchemy themes/pelican-alchemy
+```
 
-And Pelican config:
+And in Pelican config:
 
-    THEME = 'themes/pelican-alchemy/alchemy'
+```python
+THEME = 'themes/pelican-alchemy/alchemy'
+```
 
-## Settings
+### With pip
 
-Visit the [settings page](https://nairobilug.github.io/pelican-alchemy/pages/settings.html) for examples:
+Alternatively, you can install this theme with pip:
+
+```bash
+pip install "https://github.com/nairobilug/pelican-alchemy/tarball/master"
+```
+
+And import it from Pelican config:
+
+```python
+import alchemy
+THEME = alchemy.path()
+```
+
+## Usage
+
+Visit the [Settings docs](docs/settings.md) for examples:
 
 - **SITESUBTITLE**: Subtitle that appears in the header.
 - **SITEIMAGE**: Image that appears in the header.
 - **DESCRIPTION**: Index HTML head `<meta>` description.
 - **LINKS**: A list of tuples (Title, URL) for menu links.
-- **ICONS**: A list of tuples (Icon, URL) for icon links.
+- **ICONS**: A list of tuples (Icon, URL) for icon links. Icons are assumed to
+  be Font Awesome brand icons, if you need to use icons from other Font
+  Awesome icon set please provide full [CSS class], e.g. `fas fa-camera`
+  instead on just `camera`
+- **FOOTER_LINKS**: A list of tuples (Title, URL) for footer links. Replaces
+  default set of links (Authors, Archives, Categories, Tags).
+- **BOOTSTRAP_CSS**: URL of Bootstrap CSS file. Use this to enable Boostwatch themes.
+- **FONTAWESOME_CSS**: URL of Font Awesome CSS file. Use this if you wish to
+  use CDN provided version instead of the bundled one.
 - **PYGMENTS_STYLE**: Built-in Pygments style for syntax highlighting.
 - **HIDE_AUTHORS**: Hide the author(s) of an article - useful for single author sites.
-- **RFG_FAVICONS**: Use a [realfavicongenerator](https://realfavicongenerator.net/blog/new-favicon-package-less-is-more/) package.
+- **RFG_FAVICONS**: Use a Favicon Generator package.
+- **THEME_CSS_OVERRIDES**: Sequence of stylesheet URLs to override CSS provided by theme.
+  Both relative and absolute URLs are supported.
+- **THEME_JS_OVERRIDES**: Sequence of JavaScript URLs to enable with this
+  theme. Alchemy uses no JS by default. Both relative and absolute URLs are
+  supported.
 
-Others:
+[CSS class]: https://fontawesome.com/how-to-use/on-the-web/referencing-icons/basic-use
+
+Misc settings:
 
 - **DISQUS_SITENAME**
 - **GAUGES**
@@ -63,65 +144,20 @@ Others:
 - **PIWIK_URL**
 - **PIWIK_SITE_ID**
 
-Example Pelican [config](https://github.com/nairobilug/pelican-alchemy/blob/demo/pelicanconf.py) (demo site).
+Example [pelicanconf.py](https://github.com/nairobilug/pelican-alchemy/blob/demo/pelicanconf.py) (demo website).
 
-## Tips
+### Tips & Tricks
 
-### Bootstrap Classes
+[See documentation page](docs/pelican-tips.md)
 
-To have Bootstrap classes set for rendered html (`.table`, `.img-fluid` etc), use the [Bootstrapify](https://github.com/ingwinlu/pelican-bootstrapify) plugin.
+## How to Contribute
 
-In your Pelican site:
+1. Check for open issues or open a fresh issue to start a discussion around a feature idea or a bug.
+1. Fork [the repository](https://github.com/nairobilug/pelican-alchemy) on GitHub to start making your changes to the master branch (or branch off of it).
+1. Send a pull request and bug the maintainer until it gets merged and published. :)
 
-    $ mkdir plugins
-    $ git submodule add https://github.com/ingwinlu/pelican-bootstrapify plugins/pelican-bootstrapify
+Alchemy follows the [Contributor Covenant](CODE_OF_CONDUCT.md) code of conduct.
 
-And Pelican config:
+## License
 
-    # http://docs.getpelican.com/en/stable/plugins.html#how-to-use-plugins
-    PLUGIN_PATHS = ['plugins']
-    PLUGINS = ['pelican-bootstrapify']
-
-    BOOTSTRAPIFY = {
-        'table': ['table', 'table-striped', 'table-hover'],
-        'img': ['img-fluid'],
-        'blockquote': ['blockquote'],
-    }
-
-Use `BOOTSTRAPIFY` to pass a `{'css-selector': ['list-of-classes']}` dict to the plugin. Bootstrapify will append `list-of-classes` to all tags that match `css-selector`.
-
-### RFG_FAVICONS
-
-To use the `RFG_FAVICONS` setting, visit [realfavicongenerator.net](https://realfavicongenerator.net/) to generate a site favicon package and download it.
-
-In your Pelican site:
-
-    $ mkdir content/extras
-    $ unzip /path/to/favicons.zip -d content/extras
-
-And Pelican config:
-
-    # https://github.com/getpelican/pelican/wiki/Tips-n-Tricks#second-solution-using-static_paths
-    STATIC_PATHS = ['extras', 'images']
-    EXTRA_PATH_METADATA = {
-        'extras/android-chrome-192x192.png': {'path': 'android-chrome-192x192.png'},
-        'extras/apple-touch-icon.png': {'path': 'apple-touch-icon.png'},
-        'extras/browserconfig.xml': {'path': 'browserconfig.xml'},
-        ...
-    }
-
-    RFG_FAVICONS = True
-
-Note: `EXTRA_PATH_METADATA` should correspond with the favicon package:
-
-    $ unzip -l /path/to/favicons.zip
-
-### Generate `sitemap.xml`
-
-There is a `sitemap.html` Jinja2 template that can be used to [generate a sitemap](https://github.com/getpelican/pelican/wiki/Tips-n-Tricks#generate-sitemapxml).
-
-In your Pelican config:
-
-    # Default value is ['index', 'tags', 'categories', 'authors', 'archives']
-    DIRECT_TEMPLATES = ['index', 'tags', 'categories', 'authors', 'archives', 'sitemap']
-    SITEMAP_SAVE_AS = 'sitemap.xml'
+[MIT](LICENSE) © 2017 Nairobi GNU/Linux Users Group
