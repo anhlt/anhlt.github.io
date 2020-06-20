@@ -167,26 +167,18 @@ div.collapseheader {
 }
 </style>
 
-<script type="text/javascript" async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS_HTML"></script>
-<script type="text/javascript">
-init_mathjax = function() {
-    if (window.MathJax) {
-        // MathJax loaded
-        MathJax.Hub.Config({
-            tex2jax: {
-                inlineMath: [ ['$','$'], ["\\(","\\)"] ],
-                displayMath: [ ['$$','$$'], ["\\[","\\]"] ]
-            },
-            displayAlign: 'left', // Change this to 'center' to center equations.
-            "HTML-CSS": {
-                styles: {'.MathJax_Display': {"margin": 0}}
-            }
-        });
-        MathJax.Hub.Queue(["Typeset",MathJax.Hub]);
+<script type="text/x-mathjax-config">
+MathJax.Hub.Config({
+    tex2jax: {
+        inlineMath: [['$','$'], ['\\(','\\)']],
+        processEscapes: true,
+        displayMath: [['$$','$$'], ["\\[","\\]"]]
     }
-}
-init_mathjax();
+});
 </script>
+<script type="text/javascript" async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.2/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
 
 <script type="text/javascript">
@@ -292,7 +284,7 @@ def notebook(preprocessor, tag, markup):
     language_applied_highlighter = partial(custom_highlighter, language=language)
 
     nb_dir =  preprocessor.configs.getConfig('NOTEBOOK_DIR')
-    nb_path = os.path.join('content', nb_dir, src)
+    nb_path = os.path.join(settings.get('PATH', 'content'), nb_dir, src)
 
     if not os.path.exists(nb_path):
         raise ValueError("File {0} could not be found".format(nb_path))
@@ -352,7 +344,7 @@ def notebook(preprocessor, tag, markup):
 
     # this will stash special characters so that they won't be transformed
     # by subsequent processes.
-    body = preprocessor.configs.htmlStash.store(body, safe=True)
+    body = preprocessor.configs.htmlStash.store(body)
     return body
 
 notebook.header_saved = False
