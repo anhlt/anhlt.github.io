@@ -1,7 +1,7 @@
 pelican 
 Markdown 
 ghp-import 
-ipython 
+ipython==2.4.1 
 beautifulsoup4 
 typogrify 
 nbconvert
