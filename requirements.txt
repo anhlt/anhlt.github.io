@@ -5,3 +5,6 @@ ipython
 beautifulsoup4 
 typogrify 
 nbconvert
+pelican-jupyter
+nbconvert
+notebook

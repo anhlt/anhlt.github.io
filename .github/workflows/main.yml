@@ -15,16 +15,32 @@ jobs:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        python-version: [3.7]
+
     # Steps represent a sequence of tasks that will be executed as part of the job
+
     steps:
+      - name: Checkout Repo
+        uses: actions/checkout@master
     # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
 
     # Runs a single command using the runners shell
-    - name: Install Requirements
-      run: pip install -r requirements.txt
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
 
     # Runs a set of commands using the runners shell
-    - name: Run a multi-line script
-      run: |
-        make publish
-        make github 
+      - name: Run a multi-line script
+        env:
+          TRAVIS_REPO_SLUG: anhlt/deepmlml 
+        run: |
+          make publish
+          make github 
