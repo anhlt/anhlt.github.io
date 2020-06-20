@@ -1,4 +1,4 @@
-Title: Bài toán Object Detection cổ điển
+Title: Giải thích bài báo DEtection TRansformer
 Slug: End-t-End-transformer-classic-object-detection
 Date: 2020-06-16 19:18:33
 Modified: 2020-06-16 19:18:33
@@ -10,20 +10,29 @@ Summary: Giới thiệu bài toán Object Detection cổ điển, từ đó nắ
 
 Từ trước đến nay bài toán object detection thường dựa vào các thuật toán thiết kế thủ công như Non-maximum Suppession, hay anchor generation để thiết kế mạng network. Bài báo này đưa ra một phương pháp mới mới gọi là "DEtection TRansformer" sử dụng kiến trúc transfomer để giải quyết bài toán object detection.
 
-### Kiến trúc mạng 
+### Kiến trúc mạng DETR
 
-{% img  images/08/network.png 600  'DETR' %}
+{% img  images/08/network.png 1000  'DETR' %}
 
+Kiến trúc mạng DETR gồm 3 thành phần chính
 
-1. __Feed-forward ảnh qua DNN thu được convolutional features.__
+1. __Backbone network__
     
-    Trong bài báo gốc, tác giả đã nhắc đến nhiều các mạng Convolution Network có sẵn như VGG-16, ZFNet, để dễ dàng cho việc giải thích, chúng ta sẽ lấy ví dụ ở đây là mạng VGG-16. 
+    Tương tự như Faster RCNN, DETR sử dụng một mạng CNN để thu được `convolutional features` của ảnh đầu vào. 
 
-    Mạng VGG-16 chứa 13   convolutions layer kích thước $3 \times 3$ cùng với 5  max pooling layer kích thước $2 \times 2$. Khi đầu vào là một ảnh có kích thước $3 \times W \times H$ , đầu ra sẽ nhận được $3 \times W^{'} \times H^{'}$ với $W^{'} = \frac{W}{16}$ $H^{'} = \frac{H}{16}$
+
+    $$x_{\mathrm{img}} \in \mathbb{R}^{3 \times H_{0} \times W_{0}}$$
+
+    
+
+    $$f \in \mathbb{R}^{C \times H \times W} $$
+     
 
     {% img  images/rpn/step-1.png 600  'Fast RCNN' %}
 
-2.     
+2. __Hello__    
+    
+    pass
 
 
 
