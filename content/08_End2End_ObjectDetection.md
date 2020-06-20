@@ -31,12 +31,14 @@ Kiến trúc mạng DETR gồm 3 thành phần chính
     trong đó $C=2048$ , $H, W=\frac{H_{0}}{32}, \frac{W_{0}}{32}$
 
 
-    {% img  images/rpn/step-1.png 600  'Fast RCNN' %}
+    {% img  images/rpn/step-1.png 400  'Fast RCNN' %}
 
-2. __Hello__    
+2. __Transformer encoder__    
     
-    pass
+    Ở đây, tác giả sử dụng $1x1$ convolution để giảm chiều `convolutional features` từ $C$ xuống $z_{0} \in \mathbb{R}^{d \times H \times W}$. 
+    Bởi vì `encoder` có đầu vào dạng `sequence`, tại đây, `features` được `flatten` thành $z_{0} \in \mathbb{R}^{d \times HW}$ 
 
+    {% img  images/08/step1.png 400  'Fast RCNN' %}
 
 
 

@@ -65,7 +65,10 @@ CODE_DIR = 'code'
 
 # copy CNAME
 STATIC_PATHS = ['images', 'code', 'downloads', 'extra/CNAME']
-EXTRA_PATH_METADATA = {'extra/CNAME': {'path': 'CNAME'}}
+EXTRA_PATH_METADATA = {
+    'extra/CNAME': {'path': 'CNAME'},
+    'extra/favicon.ico': {'path': 'favicon.ico'}
+}
 
 
 TOC = {
