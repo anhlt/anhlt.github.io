@@ -18,7 +18,7 @@ PLUGIN_PATHS = ['plugins']
 from pelican_jupyter import liquid as nb_liquid
 PLUGINS = ['pelican-bootstrapify', 'liquid_tags.img', 'liquid_tags.video',
            'liquid_tags.youtube',
-           'liquid_tags.include_code', 'render_math', 'ipynb.liquid', 'pelican-toc', nb_liquid]
+           'liquid_tags.include_code', 'render_math', 'pelican-toc', nb_liquid]
 
 IGNORE_FILES = [".ipynb_checkpoints"]
 MARKUP = ('md', )
