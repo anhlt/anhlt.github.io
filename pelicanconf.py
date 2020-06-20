@@ -29,7 +29,7 @@ DIRECT_TEMPLATES = ['index', 'tags', 'categories',
 SITEMAP_SAVE_AS = 'sitemap.xml'
 
 # Theme
-THEME = 'themes/alchemy/alchemy'
+THEME = 'themes/elegant'
 SITESUBTITLE = '\u2728 Hành trình học deep learning'
 
 
