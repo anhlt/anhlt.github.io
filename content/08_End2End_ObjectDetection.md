@@ -20,13 +20,16 @@ Kiến trúc mạng DETR gồm 3 thành phần chính
     
     Tương tự như Faster RCNN, DETR sử dụng một mạng CNN để thu được `convolutional features` của ảnh đầu vào. 
 
+    Với mỗi ảnh đầu vào có kích thước
 
     $$x_{\mathrm{img}} \in \mathbb{R}^{3 \times H_{0} \times W_{0}}$$
 
-    
+    thu được `convolutional features` có kích thước 
 
     $$f \in \mathbb{R}^{C \times H \times W} $$
-     
+    
+    trong đó $C=2048$ , $H, W=\frac{H_{0}}{32}, \frac{W_{0}}{32}$
+
 
     {% img  images/rpn/step-1.png 600  'Fast RCNN' %}
 
