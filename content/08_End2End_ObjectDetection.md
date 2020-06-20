@@ -10,6 +10,11 @@ Summary: Giới thiệu bài toán Object Detection cổ điển, từ đó nắ
 
 Từ trước đến nay bài toán object detection thường dựa vào các thuật toán thiết kế thủ công như Non-maximum Suppession, hay anchor generation để thiết kế mạng network. Bài báo này đưa ra một phương pháp mới mới gọi là "DEtection TRansformer" sử dụng kiến trúc transfomer để giải quyết bài toán object detection.
 
+### Kiến trúc mạng 
+
+{% img  images/08/network.png 600  'DETR' %}
+
+
 
 
 ### Loss Function
