@@ -20,14 +20,16 @@ Từ trước đến nay bài toán object detection thường dựa vào các t
 
 
 $$
-
-\left[\begin{array}{(llll)l}
-30 & 40 & 50 & 60 & person_{1}\\
-70 & 30 & 40 & 70 & person_{2}\\
-60 & 50 & 60 & 30 & person_{3}\\
-20 & 80 & 50 & 70 & person_{4}
-\end{array}\right]
-
+\begin{blockarray}{cccccc}
+    a & b & c & d & e \\
+    \begin{block}{(ccccc)c}
+      1 & 1 & 1 & 1 & 1 & f \\
+      0 & 1 & 0 & 0 & 1 & g \\
+      0 & 0 & 1 & 0 & 1 & h \\
+      0 & 0 & 0 & 1 & 1 & i \\
+      0 & 0 & 0 & 0 & 1 & j \\
+    \end{block}
+\end{blockarray}
 $$
 
 
