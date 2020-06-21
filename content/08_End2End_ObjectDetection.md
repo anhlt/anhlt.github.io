@@ -10,6 +10,27 @@ Summary: Giới thiệu bài toán Object Detection cổ điển, từ đó nắ
 
 Từ trước đến nay bài toán object detection thường dựa vào các thuật toán thiết kế thủ công như Non-maximum Suppession, hay anchor generation để thiết kế mạng network. Bài báo này đưa ra một phương pháp mới mới gọi là "DEtection TRansformer" sử dụng kiến trúc transfomer để giải quyết bài toán object detection.
 
+### Một số khái niệm
+
+#### Hungarian Algotithm
+
+##### Bài toán
+    Một nhà máy có bốn nhân công thực hiện 4 công việc khác nhau trong
+
+
+
+$$
+
+\left[\begin{array}{(llll)l}
+30 & 40 & 50 & 60 & person_{1}\\
+70 & 30 & 40 & 70 & person_{2}\\
+60 & 50 & 60 & 30 & person_{3}\\
+20 & 80 & 50 & 70 & person_{4}
+\end{array}\right]
+
+$$
+
+
 ### Kiến trúc mạng DETR
 
 {% img  images/08/network.png 1000  'DETR' %}
@@ -46,6 +67,27 @@ Kiến trúc mạng DETR gồm 3 thành phần chính
 
 
 ### Loss Function
+
+DETR cho ra output gồm N dự đoán 
+
+$$y = N \times \left(c_{i} , b_{i}\right)$$
+
+với $c_{i}$ là xác suất  
+
+
+$$\hat{y} = N  \times \left(c_i , b_i\right)$$
+
+
+
+$$
+
+\hat{\sigma}=\underset{\sigma \in \mathfrak{S}_{N}}{\arg \min } \sum_{i}^{N} \mathcal{L}_{\mathrm{match}}\left(y_{i}, \hat{y}_{\sigma(i)}\right)
+
+$$
+
+
+#### Hungarian Loss
+
 
 $$
 \mathcal{L}_{\text {Hungarian }}(y, \hat{y})=\sum_{i=1}^{N}\left[-\log \hat{p}_{\hat{\sigma}(i)}\left(c_{i}\right)+\mathbb{1}_{\left\{c_{i} \neq \varnothing\right\}} \mathcal{L}_{\mathrm{box}}\left(b_{i}, \hat{b}_{\hat{\sigma}}(i)\right)\right]
