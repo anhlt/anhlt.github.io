@@ -41,6 +41,9 @@ Kiến trúc mạng DETR gồm 3 thành phần chính
     {% img  images/08/step1.png 400  'Fast RCNN' %}
 
 
+    {% img  images/08/transformer.png 400  'Encoder-Decoder' %}
+
+
 
 ### Loss Function
 
