@@ -1,4 +1,3 @@
----
 Title: Nodejs, Redis eventloop hoạt động như thế nào, Libuv, epoll
 Slug: 
 Date: 2018-01-14 12:17:14
@@ -8,7 +7,7 @@ Category: Programing
 Author: h4cker
 Lang: vi
 Summary: Epoll
----
+
 
 Một ngày cuối năm đẹp trời, tôi bị đứa bạn thân ai nấy lo lâu năm hỏi một câu, mày biết tại sao cái thằng Nodejs, Redis là Single-Thread nhưng mà sao nó vẫn chạy nhanh như thế không. Thú thật là mình không biết, vào đọc mấy cái medium thì cũng k hiểu gì. Thôi thì tự code một cái event-loop , cũng là để hiểu event-loop nó hoạt động như thế nào.
 
@@ -33,7 +32,7 @@ Khi một tiến trình được khởi chạy thì mặc định sẽ được 
 + stdout
 + stderr
 
-Các tài nguyên này được lưu trong bảng gọi là **File Descriptor Table** (FDTable) với chỉ số (index) là File Descriptor(FD)
+Các tài nguyên này được lưu trong bảng gọi là **File Descriptor Table** (`FDTable`) với chỉ số (index) là File Descriptor(`FD`)
 
 |FD    	|Pointer   	            |
 |---	|---	                |
@@ -41,7 +40,7 @@ Các tài nguyên này được lưu trong bảng gọi là **File Descriptor Ta
 |   1   |   stdout pointer	    |
 |   2   |   stderr pointer	    |
 
-Nếu tiến trình này mở một file mới, thì file mới sẽ được add vào FDTable
+Nếu tiến trình này mở một file mới, thì file mới sẽ được add vào `FDTable`, Tương tự khi tiến trình này mở 1 connection, một pipe, tất cả các tài nguyên này, đều là file, và được lưu ở `FDTable`
 
 |FD    	|Pointer   	            |
 |---	|---	                |
