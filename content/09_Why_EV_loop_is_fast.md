@@ -57,10 +57,15 @@ Nhắc đến **Event Loop** trong javascript thì chắc chẳng ai còn lạ g
 {% youtube 8aGhZQkoFbQ %}
 
 
-Libuv là gì, 
+Libuv là gì, nó là thư viện để xử lý các vấn đề liên quan đến bất đồng bộ, như 
 
+```
     libuv is a multi-platform support library with a focus on asynchronous I/O. 
     It was primarily developed for use by Node.js, but it's also used by Luvit, Julia, pyuv, and others.
+```
+
+{% img images/09/nodejs_system.png 1000 'DETR' %}
+
 
 
 
