@@ -1,5 +1,5 @@
 ---
-Title: Nodejs, Redis eventloop hoạt động như thế nào, Libuv, epoll
+Title: Nodejs eventloop hoạt động như thế nào, Libuv, epoll
 Slug: 
 Date: 2020-12-28 12:17:14
 Modified: 2020-12-28 12:17:14
@@ -69,9 +69,9 @@ Libuv là gì, nó là thư viện để xử lý các vấn đề liên quan đ
 
 ### Blocking Socket Server
 
-{% include_code 09/blocking_socket.py lang:python :hidefilename: blocking_socket.py  %}
+{% include_code 09/blocking_socket.py lang:python %}
 
-Nói đến socket programing thì ví dụ trên là một chương trình socket điển hình. 
+Nói đến lập trình socketsocket thì ví dụ trên là một chương trình socket điển hình. 
 - Khởi tạo một socket server, lắng nghe ở port `654321`. 
 - Tạo một vòng lặp vô tận, chờ một kết nối đến
     - nhận dữ liệu từ client cho đến khi có kí tự `EOL` trong nội dung.
@@ -105,18 +105,14 @@ Các bạn có thể thấy, server xử lý tuần tự 1 client trong 1 thời
 
 Để giải quyết bài toán này thì mọi người thường nghĩ đến một giải pháp là `multithread`, đây cũng là giải pháp thường được các thầy giáo hướng dẫn ở trong trường đại học. Mỗi khi có một kết nối đến server thì chương trình sẽ khởi tạo 1 thread mới, xử lý data được gửi đến từ client và trả lại dữ liệu cho client.
 
-Nhược điểm của phương pháp này nó là, mỗi thread sẽ có `call stack` riêng, và việc chuyển đổi giữa các `call stack` cũng ảnh hưởng tới hiệu năng của chương trình.
+Nhược điểm của phương pháp này nó là, mỗi thread sẽ có `call stack` riêng, và việc chuyển đổi giữa các `call stack` cũng ảnh hưởng tới hiệu năng của chương trình. Một cách khác để giải quyết vấn đề này đó chính là `non-blocking IO`, nói một cách khác, chúng ta sẽ không bắt chương trình chờ cho đến khi có data nữa.
 
 
+### Non-Blocking Socket Server
 
-```python
-
-
-
-```
+{% include_code 09/non_blocking_socket.py lang:python %}
 
 
-
-
+[![asciicast](https://asciinema.org/a/DQcgHeBbIcy7AXU1lP5VKeMqr.svg)](https://asciinema.org/a/DQcgHeBbIcy7AXU1lP5VKeMqr)
 
 
