@@ -64,7 +64,7 @@ Libuv là gì, nó là thư viện để xử lý các vấn đề liên quan đ
     It was primarily developed for use by Node.js, but it's also used by Luvit, Julia, pyuv, and others.
 ```
 
-{% img images/09/nodejs_system.png 1000 'DETR' %}
+{% img images/09/nodejs_system.png 1000 'Node JS System' %}
 
 
 ### Blocking Socket Server
@@ -84,7 +84,7 @@ Nhưng vấn đề ở chương trình này là gì, đó là nó bị `blocking
         conn, address = server.accept()
 ```
 
-Tại dòng lệnh này thì trình dịch python sẽ dừng chương trình lại, không xử lý gì cả, chờ đợt cho đến khi có một connection mới. Thuật ngữ thường được gọi là `blocking IO`. Dẫn đến chương trình này chỉ làm việc được với tối đa 1 client trong 1 thời điểm, những client sau đó phải chờ cho đến khi client trước đó hoàn thành phiên làm việc mới được xử lý.
+Tại dòng lệnh này thì trình dịch python sẽ dừng chương trình lại, không xử lý gì cả, chờ đợt cho đến khi có một connection mới. Thuật ngữ thường được gọi là `blocking IO`. Khi có dữ liệu mới từ client, chương trình tiếp tục xử lý và sau đó quay lại chu kì lặp và tiếp tục chờ đợi. Dẫn đến chương trình này chỉ làm việc được với tối đa 1 client trong 1 thời điểm, những client sau đó phải chờ cho đến khi client trước đó hoàn thành phiên làm việc mới được xử lý.
 
 Các bạn có thể xem demo chường trình này dưới đây, tôi cùng một lúc khởi tạo 2 client với id là `1` và `2` đến socket server. Mỗi client hoạt động theo logic như sau:
 - Khởi tạo kết nối đến server
@@ -110,7 +110,14 @@ Nhược điểm của phương pháp này nó là, mỗi thread sẽ có `call 
 
 ### Non-Blocking Socket Server
 
-{% include_code 09/non_blocking_socket.py lang:python %}
+{% include_code 09/non_blocking_socket.py lines:67-94 lang:python %}
+
+Để giải quyết bài toán trên mà không sử dụng đến `multithread`, chúng ta cần sử dụng một `system call` là `epoll`. `epoll` là 1 câu lệnh của hệ điều hành linux (`system call`), đưa cho `epoll` một hoặc nhiều `file descriptors`, `epoll` sẽ trả về cho chương trình những file nào có thể đọc được.
+
+{% img images/09/epoll.png 1000 'Epoll' %}
+
+
+
 
 
 [![asciicast](https://asciinema.org/a/DQcgHeBbIcy7AXU1lP5VKeMqr.svg)](https://asciinema.org/a/DQcgHeBbIcy7AXU1lP5VKeMqr)

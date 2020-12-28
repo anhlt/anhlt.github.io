@@ -80,7 +80,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server, epoll_context(
     server_fd = server.fileno()
 
     while True:
-        events = epoll.poll(5)
+        events = epoll.poll(0)
         print("waiting..")
         for fileno, event in events:
             if fileno == server_fd:
