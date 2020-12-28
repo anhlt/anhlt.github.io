@@ -3,7 +3,7 @@
 from __future__ import unicode_literals
 
 AUTHOR = 'Carol'
-SITENAME = 'Random Thoughs'
+SITENAME = 'Random Thoughts'
 SITEURL = 'https://deepmlml.com'
 
 PATH = 'content'
@@ -35,7 +35,7 @@ SITEMAP_SAVE_AS = 'sitemap.xml'
 
 # Theme
 THEME = 'themes/alchemy/alchemy'
-SITESUBTITLE = '\u2728 Hành trình học deep learning'
+SITESUBTITLE = '\u2728 Suy nghĩ vu vơ'
 
 
 # Feed generation is usually not desired when developing
