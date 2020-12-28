@@ -67,22 +67,8 @@ Libuv là gì, nó là thư viện để xử lý các vấn đề liên quan đ
 {% img images/09/nodejs_system.png 1000 'DETR' %}
 
 
+### Blocking Socket Server
 
+{% include_code 09/blocking_socket.py lang:python :hidefilename: blocking_socket.py %}
 
-
-
-
-
-
-
-
-### Nguyên lý 
-
-#### R-CNN
-
-#### Fast RCNN 
-
-#### Faster RCNN
-
-Tổng kết lại ta có bảng so sánh đơn giản về 3 thuật toán trên như sau Hello
 
