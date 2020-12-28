@@ -1,6 +1,6 @@
 import socket
 
-EOL = b'\n\n'
+EOL = b'\n'
 response = b'Hello world'
 HOST = '127.0.0.1'  # The server's hostname or IP address
 PORT = 65432        # The port used by the server
@@ -18,7 +18,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
                 print('-' * 50 + '\n')
                 print(req.decode())
                 print('-' * 50 + '\n')
-                break
 
             conn.send(response)
 
