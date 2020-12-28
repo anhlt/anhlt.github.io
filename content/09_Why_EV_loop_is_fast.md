@@ -86,7 +86,14 @@ Nhưng vấn đề ở chương trình này là gì, đó là nó bị `blocking
 
 Tại dòng lệnh này thì trình dịch python sẽ dừng chương trình lại, không xử lý gì cả, chờ đợt cho đến khi có một connection mới. Thuật ngữ thường được gọi là `blocking IO`. Dẫn đến chương trình này chỉ làm việc được với tối đa 1 client trong 1 thời điểm, những client sau đó phải chờ cho đến khi client trước đó hoàn thành phiên làm việc mới được xử lý.
 
-Các bạn có thể xem demo chường trình này dưới đây, tôi cùng một lúc khởi tạo 2 client với id là 1 và 2 đến socket server. Server xử lý tuần tự xong client 1 xong mới tiếp tục xử lý client 2
+Các bạn có thể xem demo chường trình này dưới đây, tôi cùng một lúc khởi tạo 2 client với id là `1` và `2` đến socket server. Mỗi client hoạt động theo logic như sau:
+- Khởi tạo kết nối đến server
+- Sau một khoảng thời gian nhất định, gửi 1 xâu có giá trị `hello from {client_id}` đến server
+- Sau 10 lần gửi thông điệp client sẽ gửi `EOL` đến server
+
+
+Các bạn có thể thấy, server xử lý tuần tự 1 client trong 1 thời điểm, sau khi hoàn thành xử lý với `client 1`, thì server mới tiếp tục làm việc với `client 2` 
+
 
 
 [![asciicast](https://asciinema.org/a/OMX7Buub9ksUi9k7eLiUSK6g8.svg)](https://asciinema.org/a/OMX7Buub9ksUi9k7eLiUSK6g8)
@@ -99,10 +106,6 @@ Các bạn có thể xem demo chường trình này dưới đây, tôi cùng m�
 Để giải quyết bài toán này thì mọi người thường nghĩ đến một giải pháp là `multithread`, đây cũng là giải pháp thường được các thầy giáo hướng dẫn ở trong trường đại học. Mỗi khi có một kết nối đến server thì chương trình sẽ khởi tạo 1 thread mới, xử lý data được gửi đến từ client và trả lại dữ liệu cho client.
 
 Nhược điểm của phương pháp này nó là, mỗi thread sẽ có `call stack` riêng, và việc chuyển đổi giữa các `call stack` cũng ảnh hưởng tới hiệu năng của chương trình.
-
-
-
-
 
 
 
