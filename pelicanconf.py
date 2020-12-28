@@ -3,7 +3,7 @@
 from __future__ import unicode_literals
 
 AUTHOR = 'Carol'
-SITENAME = 'Deep Learning'
+SITENAME = 'Random Thoughs'
 SITEURL = 'https://deepmlml.com'
 
 PATH = 'content'
@@ -46,9 +46,7 @@ AUTHOR_FEED_ATOM = None
 AUTHOR_FEED_RSS = None
 
 # Blogroll
-LINKS = (('Machine Learning Cơ Bản', 'http://machinelearningcoban.com/'),
-         ('Python.org', 'http://python.org/'),
-         ('Pytorch', 'http://pytorch.org/'),)
+LINKS = ()
 
 # Social widget
 SOCIAL = (('Facebook', 'https://www.facebook.com/deepmlml/'),)

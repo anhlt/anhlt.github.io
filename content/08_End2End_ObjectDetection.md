@@ -80,9 +80,7 @@ $$\hat{y} = N  \times \left(c_i , b_i\right)$$
 
 
 $$
-
 \hat{\sigma}=\underset{\sigma \in \mathfrak{S}_{N}}{\arg \min } \sum_{i}^{N} \mathcal{L}_{\mathrm{match}}\left(y_{i}, \hat{y}_{\sigma(i)}\right)
-
 $$
 
 
