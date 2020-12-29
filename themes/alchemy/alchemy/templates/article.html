@@ -22,11 +22,7 @@
 
 
 {% block content %}
-  {% if article.toc %}
-  <div class="col-lg-3 hidden-xs hidden-sm">
-      {{article.toc}}
-  </div>
-  {% endif %}
+
   <article class="article">
     <header>
       <ul class="list-inline">
@@ -65,6 +61,11 @@
       </ul>
     </header>
     <div class="content">
+      {% if article.toc %}
+      <div class="col-lg-3 hidden-xs hidden-sm">
+          {{article.toc}}
+      </div>
+      {% endif %}
       {{ article.content }}
       {% if article.link %}
         <p class="link-button"><a href="{{ article.link }}" rel="bookmark">
