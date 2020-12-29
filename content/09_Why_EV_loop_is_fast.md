@@ -50,6 +50,22 @@ Nếu tiến trình này mở một file mới, thì file mới sẽ được ad
 |   3   |   stderr pointer	    |
 |   4   |   file pointer	    |
 
+### Timer / Callback
+
+Cùng nói qua một chút về `timer` và `callback` trong `javascipt`. Chúng ta cùng xem xét đoạn code sau
+
+    :::javascipt
+
+    setTimeout(function cb() {
+        console.log("callback")
+    }, 5000)
+
+
+thì nodejs sẽ khởi tạo 1 `timer`, sau khi `timer`đó kết thúc, thì sẽ đẩy `callback` vào `task queue`
+
+
+{% video  images/09/timer3.mp4 800 300 %}
+
 ### Libuv / Eventloop
 
 Nhắc đến **Event Loop** trong javascript thì chắc chẳng ai còn lạ gì nữa, nếu thấy lạ thì mời bạn xem video rất nổi tiếng sau đây:
@@ -80,9 +96,9 @@ Nói đến lập trình socketsocket thì ví dụ trên là một chương tr�
 
 Nhưng vấn đề ở chương trình này là gì, đó là nó bị `blocking` ở câu lệnh sau 
 
-```python
+    :::python
         conn, address = server.accept()
-```
+
 
 Tại dòng lệnh này thì trình dịch python sẽ dừng chương trình lại, không xử lý gì cả, chờ đợt cho đến khi có một connection mới. Thuật ngữ thường được gọi là `blocking IO`. Khi có dữ liệu mới từ client, chương trình tiếp tục xử lý và sau đó quay lại chu kì lặp và tiếp tục chờ đợi. Dẫn đến chương trình này chỉ làm việc được với tối đa 1 client trong 1 thời điểm, những client sau đó phải chờ cho đến khi client trước đó hoàn thành phiên làm việc mới được xử lý.
 
@@ -166,7 +182,10 @@ Khi kiểm tra `file descriptor` của sự kiện mới là `socket server file
 
 ## LibUV
 
-{% video  images/09/timer3.mp4 500 %}
+
+
+
+
 
 
 Nói một cách đơn giản, Libuv chỉ là 1 vòng lặp.
