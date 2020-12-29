@@ -8,6 +8,7 @@ Category: Programing
 Author: h4cker
 Lang: vi
 Summary: Libuv , epoll hoạt động như thế nào
+Toc: True
 ---
 
 Một ngày cuối năm đẹp trời, tôi bị đứa bạn thân ai nấy lo lâu năm hỏi một câu, mày biết tại sao cái thằng Nodejs, Redis là Single-Thread nhưng mà sao nó vẫn chạy nhanh như thế không. Thú thật là mình không biết, vào đọc mấy cái medium thì cũng k hiểu gì. Thôi thì tự code một cái event-loop , cũng là để hiểu event-loop nó hoạt động như thế nào.
@@ -159,8 +160,6 @@ Khi kiểm tra `file descriptor` của sự kiện mới là `socket server file
 
 
 {% include_code 09/non_blocking_socket.py lines:59-64 lang:python :hideall: %}
-
-
 
 
 [![asciicast](https://asciinema.org/a/DQcgHeBbIcy7AXU1lP5VKeMqr.svg)](https://asciinema.org/a/DQcgHeBbIcy7AXU1lP5VKeMqr)
