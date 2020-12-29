@@ -78,5 +78,5 @@ TOC = {
     # if it does not evaluate
     # to 'true' no toc will be generated
 
-    'TOC_INCLUDE_TITLE': 'false',     # If 'true' include title in toc
+    'TOC_INCLUDE_TITLE': 'true',     # If 'true' include title in toc
 }
