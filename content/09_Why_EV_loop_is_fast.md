@@ -110,13 +110,17 @@ Nhược điểm của phương pháp này nó là, mỗi thread sẽ có `call 
 
 ### Non-Blocking Socket Server
 
-{% include_code 09/non_blocking_socket.py lines:67-94 lang:python %}
 
 Để giải quyết bài toán trên mà không sử dụng đến `multithread`, chúng ta cần sử dụng một `system call` là `epoll`. `epoll` là 1 câu lệnh của hệ điều hành linux (`system call`), đưa cho `epoll` một hoặc nhiều `file descriptors`, `epoll` sẽ trả về cho chương trình những file nào có thể đọc được.
 
 {% img images/09/epoll.png 1000 'Epoll' %}
 
 
+
+{% img images/09/epoll_flow.png 1000 'Epoll Flow' %}
+
+
+{% include_code 09/non_blocking_socket.py lines:67-94 lang:python %}
 
 
 
