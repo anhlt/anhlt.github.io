@@ -160,10 +160,39 @@ Khi kiểm tra `file descriptor` của sự kiện mới là `socket server file
 
 {% include_code 09/non_blocking_socket.py lines:59-64 lang:python :hideall: %}
 
-## LibUV
-
-
 
 [![asciicast](https://asciinema.org/a/DQcgHeBbIcy7AXU1lP5VKeMqr.svg)](https://asciinema.org/a/DQcgHeBbIcy7AXU1lP5VKeMqr)
 
 
+## LibUV
+
+{% video  images/09/timer3.mp4 500 %}
+
+
+Nói một cách đơn giản, Libuv chỉ là 1 vòng lặp.
+
+
+Đầu tiên chương trình sẽ kiểm tra vòng lặp này có đang hoạt động hay không? Chương trình có đang có kết nối, có đang có timer chưa chạy hay không, có đang mở socket nào hay không.
+
+Tiếp theo chương trình sẽ kiểm tra xem có timer nào đang hết hạn hay không.
+
+Thực thi các callback đang được pending trong queue.
+
+Bước tiếp theo:
+
+Chuẩn bị handler
+Block và chờ IO từ epoll
+
+Timeout được tính toán sao cho chương trình không phải chờ poll quá lâu. 
+
+The core is just a loop
+
+check timer 
+call pendding callback
+
+idle handle
+prepare handle
+poll for IO
+check handle
+
+Call callback
