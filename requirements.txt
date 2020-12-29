@@ -1,10 +1,5 @@
-pelican 
+pelican==4.5.3
 Markdown 
 ghp-import 
-ipython==2.4.1 
 beautifulsoup4 
-typogrify 
-nbconvert
-pelican-jupyter
-nbconvert
-notebook
+typogrify
