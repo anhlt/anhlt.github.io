@@ -37,18 +37,18 @@ Các tài nguyên này được lưu trong bảng gọi là **File Descriptor Ta
 
 |FD    	|Pointer   	            |
 |---	|---	                |
-|   0   |   stdin pointer   	|
-|   1   |   stdout pointer	    |
-|   2   |   stderr pointer	    |
+|   1   |   stdin pointer   	|
+|   2   |   stdout pointer	    |
+|   3   |   stderr pointer	    |
 
 Nếu tiến trình này mở một file mới, thì file mới sẽ được add vào `FDTable`, Tương tự khi tiến trình này mở 1 connection, một pipe, tất cả các tài nguyên này, đều là file, và được lưu ở `FDTable`
 
 |FD    	|Pointer   	            |
 |---	|---	                |
-|   0   |   stdin pointer   	|
-|   1   |   stdout pointer	    |
-|   2   |   stderr pointer	    |
-|   3   |   file pointer	    |
+|   1   |   stdin pointer   	|
+|   2   |   stdout pointer	    |
+|   3   |   stderr pointer	    |
+|   4   |   file pointer	    |
 
 #### Libuv / Eventloop
 
@@ -129,7 +129,37 @@ Quay lại về bài toán lập trình socket. Để sử dụng `epoll` thì c
 {% img images/09/epoll_flow.png 500 'Epoll Flow' %}
 
 
+
 {% include_code 09/non_blocking_socket.py lines:67-94 lang:python %}
+
+Đối với mỗi loại event thì server sẽ xử lý bằng những hàm tương ứng, chúng ta cùng xem kỹ hơn cách server xử lý từng loại sự kiện.
+
+- #### Có kết nối mới từ client
+
+Khi kiểm tra `file descriptor` của sự kiện mới là `socket server file descriptor` chúng ta hiểu được rằng là đã có một kết nối đến server.
+
++ Bởi vì kết nối cũng là 1 file, nên chúng ta sẽ đăng kí `fd` của kết nối này vào trong `epoll`
++ Mỗi khi có dữ liệu mới đến từ kết nối này, `epoll` sẽ tạo event mới cho chúng ta
+
+{% include_code 09/non_blocking_socket.py lines:26-38 lang:python :hideall: %}
+
+
+- #### Có dữ liệu từ kết nối:
+
++ Đọc dữ liệu từ kết nối
++ Nếu kết nối bị ngắt, xóa `fd` tương ứng khỏi `epoll`
++ Nếu có `EOL` trong dữ liệu thì set event cho `fd` trở thành `EPOLLOUT`, tương ứng với việc thông báo cho chương trình là đã đọc hết dữ liệu từ client này, hãy hồi đáp về cho client
+
+{% include_code 09/non_blocking_socket.py lines:40-58 lang:python :hideall: %}
+
+- #### Có tín hiệu hồi đáp cho client.
+
++ Gửi dữ liệu cho client
++ Đổi loại event cho kết nối thành `EPOLLIN`, để server tiếp lắng nghe dữ liệu mới trên kết nối này
+
+
+{% include_code 09/non_blocking_socket.py lines:59-64 lang:python :hideall: %}
+
 
 
 
