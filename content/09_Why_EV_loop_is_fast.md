@@ -64,7 +64,7 @@ Libuv là gì, nó là thư viện để xử lý các vấn đề liên quan đ
     It was primarily developed for use by Node.js, but it's also used by Luvit, Julia, pyuv, and others.
 ```
 
-{% img images/09/nodejs_system.png 1000 'Node JS System' %}
+{% img images/09/nodejs_system.png 500 'Node JS System' %}
 
 
 ### Blocking Socket Server
@@ -110,14 +110,23 @@ Nhược điểm của phương pháp này nó là, mỗi thread sẽ có `call 
 
 ### Non-Blocking Socket Server
 
+{% img images/09/epoll.png 500 'Epoll' %}
 
 Để giải quyết bài toán trên mà không sử dụng đến `multithread`, chúng ta cần sử dụng một `system call` là `epoll`. `epoll` là 1 câu lệnh của hệ điều hành linux (`system call`), đưa cho `epoll` một hoặc nhiều `file descriptors`, `epoll` sẽ trả về cho chương trình những file nào có thể đọc được.
 
-{% img images/09/epoll.png 1000 'Epoll' %}
 
 
+Quay lại về bài toán lập trình socket. Để sử dụng `epoll` thì chúng ta sẽ thay đổi logic như sau:
 
-{% img images/09/epoll_flow.png 1000 'Epoll Flow' %}
+- Khởi tạo một `socket`, và `epoll`
+- Đăng kí `socket file descriptor` cùng sự kiện `EPOLLIN` vào trong `epoll`
+- Tại một vòng lặp vô tận:
+    + kiểm tra xem epoll có event mới nào không
+    + nếu có sự kiện mới thì xử lý sự kiện đó, và tiếp tục lặp
+    + nếu không thì tiếp tục quay lại vòng lặp
+
+
+{% img images/09/epoll_flow.png 500 'Epoll Flow' %}
 
 
 {% include_code 09/non_blocking_socket.py lines:67-94 lang:python %}
