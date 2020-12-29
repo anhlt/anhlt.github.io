@@ -73,7 +73,8 @@ Nhắc đến **Event Loop** trong javascript thì chắc chẳng ai còn lạ g
 {% youtube 8aGhZQkoFbQ %}
 
 
-Libuv là gì, nó là thư viện để xử lý các vấn đề liên quan đến bất đồng bộ, như 
+
+Libuv là gì, nó là thư viện để xử lý các vấn đề liên quan đến bất đồng bộ. Libuv là nền tảng của event-loop trong Nodejs. Video ở trên đã giải thích được nodejs tương tác với stack , task queue, event loop như thế nào. Bài viết này sẽ giải thích cách mà event loop hoạt đột. 
 
 ```
     libuv is a multi-platform support library with a focus on asynchronous I/O. 
@@ -82,6 +83,8 @@ Libuv là gì, nó là thư viện để xử lý các vấn đề liên quan đ
 
 {% img images/09/nodejs_system.png 500 'Node JS System' %}
 
+
+Để dễ hiểu hơn về cơ chế hoạt động của event-loop. hãy bắt đầu thử viết một event loop đơn giản, xử lý kết nối qua socket. Tôi sẽ đưa ra 2 ví dụ về 2 cách viết.
 
 ## Blocking Socket Server
 
@@ -184,34 +187,16 @@ Khi kiểm tra `file descriptor` của sự kiện mới là `socket server file
 
 
 
-
-
+{% img images/09/loop_iteration.png 500 'Epoll' %}
 
 
 Nói một cách đơn giản, Libuv chỉ là 1 vòng lặp.
 
 
-Đầu tiên chương trình sẽ kiểm tra vòng lặp này có đang hoạt động hay không? Chương trình có đang có kết nối, có đang có timer chưa chạy hay không, có đang mở socket nào hay không.
-
-Tiếp theo chương trình sẽ kiểm tra xem có timer nào đang hết hạn hay không.
-
-Thực thi các callback đang được pending trong queue.
-
-Bước tiếp theo:
-
-Chuẩn bị handler
-Block và chờ IO từ epoll
-
-Timeout được tính toán sao cho chương trình không phải chờ poll quá lâu. 
-
-The core is just a loop
-
-check timer 
-call pendding callback
-
-idle handle
-prepare handle
-poll for IO
-check handle
-
-Call callback
+- Đầu tiên chương trình sẽ kiểm tra vòng lặp này có đang hoạt động hay không? Chương trình có handler nào hay không, có kết nối nào hay không
+- Thực thi những `timer` đã hết thời gian chờ. Khi một timer hết hạn, thì `callback` của timer đó sẽ được đẩy vào queue
+- Thực thi các `callback` đang được pending trong `task queue`.
+- Tính toán thời gian chờ (timeout) khi polling
+- Chờ IO trong khoảng thời gian `timeout`
+- Kiểm tra `callback handler` đã được thực thi hay chưa.
+- Thực thi `close callbacks`
