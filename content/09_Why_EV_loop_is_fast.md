@@ -14,11 +14,11 @@ Toc: True
 Một ngày cuối năm đẹp trời, tôi bị đứa bạn thân ai nấy lo lâu năm hỏi một câu, mày biết tại sao cái thằng Nodejs, Redis là Single-Thread nhưng mà sao nó vẫn chạy nhanh như thế không. Thú thật là mình không biết, vào đọc mấy cái medium thì cũng k hiểu gì. Thôi thì tự code một cái event-loop , cũng là để hiểu event-loop nó hoạt động như thế nào.
 
 
-### Một số khái niệm
+## Một số khái niệm
 
 Nào cùng nhau tra cứu một số khái niệm, để hiểu được bài viết này, cảnh báo là nhiều chữ và nhiều code nên các bạn cứ thảnh thơi ra làm ấm trà, điếu thuốc rồi vào đọc cho nó thư thả.
 
-#### File Descriptors / File Descriptor Table
+### File Descriptors / File Descriptor Table
 
 Trong linux có một câu nói khá nổi tiếng `Everything is a file`, File ở đây có thể là.
     
@@ -51,7 +51,7 @@ Nếu tiến trình này mở một file mới, thì file mới sẽ được ad
 |   3   |   stderr pointer	    |
 |   4   |   file pointer	    |
 
-#### Libuv / Eventloop
+### Libuv / Eventloop
 
 Nhắc đến **Event Loop** trong javascript thì chắc chẳng ai còn lạ gì nữa, nếu thấy lạ thì mời bạn xem video rất nổi tiếng sau đây:
 
@@ -68,7 +68,7 @@ Libuv là gì, nó là thư viện để xử lý các vấn đề liên quan đ
 {% img images/09/nodejs_system.png 500 'Node JS System' %}
 
 
-### Blocking Socket Server
+## Blocking Socket Server
 
 {% include_code 09/blocking_socket.py lang:python %}
 
@@ -109,7 +109,7 @@ Các bạn có thể thấy, server xử lý tuần tự 1 client trong 1 thời
 Nhược điểm của phương pháp này nó là, mỗi thread sẽ có `call stack` riêng, và việc chuyển đổi giữa các `call stack` cũng ảnh hưởng tới hiệu năng của chương trình. Một cách khác để giải quyết vấn đề này đó chính là `non-blocking IO`, nói một cách khác, chúng ta sẽ không bắt chương trình chờ cho đến khi có data nữa.
 
 
-### Non-Blocking Socket Server
+## Non-Blocking Socket Server
 
 {% img images/09/epoll.png 500 'Epoll' %}
 
@@ -135,7 +135,7 @@ Quay lại về bài toán lập trình socket. Để sử dụng `epoll` thì c
 
 Đối với mỗi loại event thì server sẽ xử lý bằng những hàm tương ứng, chúng ta cùng xem kỹ hơn cách server xử lý từng loại sự kiện.
 
-- #### Có kết nối mới từ client
+### Có kết nối mới từ client
 
 Khi kiểm tra `file descriptor` của sự kiện mới là `socket server file descriptor` chúng ta hiểu được rằng là đã có một kết nối đến server.
 
@@ -145,7 +145,7 @@ Khi kiểm tra `file descriptor` của sự kiện mới là `socket server file
 {% include_code 09/non_blocking_socket.py lines:26-38 lang:python :hideall: %}
 
 
-- #### Có dữ liệu từ kết nối:
+### Có dữ liệu từ kết nối:
 
 + Đọc dữ liệu từ kết nối
 + Nếu kết nối bị ngắt, xóa `fd` tương ứng khỏi `epoll`
@@ -153,7 +153,7 @@ Khi kiểm tra `file descriptor` của sự kiện mới là `socket server file
 
 {% include_code 09/non_blocking_socket.py lines:40-58 lang:python :hideall: %}
 
-- #### Có tín hiệu hồi đáp cho client.
+### Có tín hiệu hồi đáp cho client.
 
 + Gửi dữ liệu cho client
 + Đổi loại event cho kết nối thành `EPOLLIN`, để server tiếp lắng nghe dữ liệu mới trên kết nối này
