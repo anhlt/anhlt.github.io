@@ -17,7 +17,7 @@ PLUGIN_PATHS = ['plugins']
 
 PLUGINS = ['pelican-bootstrapify', 'liquid_tags.img', 'liquid_tags.video',
            'liquid_tags.youtube',
-           'liquid_tags.include_code', 'render_math', 'pelican-toc']
+           'liquid_tags.include_code', 'render_math']
 
 IGNORE_FILES = [".ipynb_checkpoints"]
 MARKUP = ('md', )
@@ -68,15 +68,14 @@ EXTRA_PATH_METADATA = {
     'extra/favicon.ico': {'path': 'favicon.ico'}
 }
 
-
-TOC = {
-    'TOC_HEADERS': '^h[1-3]',  # What headers should be included in
-    # the generated toc
-    # Expected format is a regular expression
-
-    'TOC_RUN': 'true',    # Default value for toc generation,
-    # if it does not evaluate
-    # to 'true' no toc will be generated
-
-    'TOC_INCLUDE_TITLE': 'true',     # If 'true' include title in toc
+MARKDOWN = {
+  'extension_configs': {
+    'markdown.extensions.toc': {
+      'title': 'Table of contents:' 
+    },
+    'markdown.extensions.codehilite': {'css_class': 'highlight'},
+    'markdown.extensions.extra': {},
+    'markdown.extensions.meta': {},
+  },
+  'output_format': 'html5',
 }
