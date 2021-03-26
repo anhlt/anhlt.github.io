@@ -15,9 +15,11 @@ DEFAULT_LANG = 'vi'
 # Plugin
 PLUGIN_PATHS = ['plugins']
 
-PLUGINS = ['pelican-bootstrapify', 'liquid_tags.img', 'liquid_tags.video',
-           'liquid_tags.youtube',
-           'liquid_tags.include_code', 'render_math']
+PLUGINS = ['pelican-bootstrapify', 'pelican.plugins.pelican-liquid-tags', 'pelican.plugins.render_math']
+
+
+LIQUID_TAGS = ["img", "literal", "video", "youtube",
+               "vimeo", "include_code"]
 
 IGNORE_FILES = [".ipynb_checkpoints"]
 MARKUP = ('md', )
