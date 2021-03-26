@@ -7,6 +7,7 @@ Tags:  Interview, Paypay, Exawizard, TRI-AD, Smartnews
 Category: Interview
 Author: h4cker
 Lang: vi
+Status: draft
 Summary: Quá trình chuẩn bị xin việc, làm gì để vào Paypay
 ---
 
