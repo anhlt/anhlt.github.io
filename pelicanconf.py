@@ -34,7 +34,7 @@ DIRECT_TEMPLATES = ['index', 'tags', 'categories',
 SITEMAP_SAVE_AS = 'sitemap.xml'
 
 # Theme
-THEME = 'themes/alchemy/alchemy'
+THEME = 'themes/pelican-alchemy/alchemy'
 SITESUBTITLE = '\u2728 Suy nghĩ vu vơ'
 
 

@@ -1,4 +1,0 @@
-recursive-include alchemy *
-include LICENSE
-include README.md
-include screenshot.jpg
