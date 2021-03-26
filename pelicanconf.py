@@ -15,7 +15,7 @@ DEFAULT_LANG = 'vi'
 # Plugin
 PLUGIN_PATHS = ['plugins']
 
-PLUGINS = ['pelican-bootstrapify', 'liquid-tags', 'pelican.plugins.render_math']
+PLUGINS = ['pelican-bootstrapify', 'liquid-tags', 'pelican.plugins.render_math', 'series']
 
 
 LIQUID_TAGS = ["img", "literal", "video", "youtube",

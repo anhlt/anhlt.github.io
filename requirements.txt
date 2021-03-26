@@ -5,3 +5,4 @@ beautifulsoup4
 typogrify
 pelican-liquid-tags
 pelican-render-math
+pelican-series
