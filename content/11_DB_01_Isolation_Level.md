@@ -1,5 +1,5 @@
 ---
-Title: Transaction Level là gì
+Title: [Short] Transaction in DB 
 Slug: 
 Date: 2021-01-21 12:17:14
 Modified: 2021-01-21 12:17:14
@@ -32,3 +32,4 @@ Khi sủ dụng một hệ quản trị cơ sở dữ liệu, thì một điều
 
 ## Snapshot Isolation
 ## Serializable
+
