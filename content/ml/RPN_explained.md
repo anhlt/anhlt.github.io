@@ -34,7 +34,7 @@ Faster RCNN là một thuật toán để tìm kiếm vị trí của vật th�
 3. Dựa vào kích thước cùng vị trí của các region proposals đối với ảnh gốc, ta sẽ tính toán được vị trí của region proposal trong convolutional features.
 4. Sửa dụng giá trị convolutional faetures của region proposal, ta dự đoán được vị trí các đỉnh của bounding box cũng như vật thể nằm trong bounding box là gì.
 
-{% img  images/rpn/fast_rcnn.png 600  'Fast RCNN' %}
+{% img  /images/rpn/fast_rcnn.png 600  'Fast RCNN' %}
 
 Source: https://www.slideshare.net/simplyinsimple/detection-52781995.
 
@@ -61,13 +61,13 @@ Cách hoạt động RPN có 2 bước chính
 
 	Mạng VGG-16 chứa 13   convolutions layer kích thước $3 \times 3$ cùng với 5  max pooling layer kích thước $2 \times 2$. Khi đầu vào là một ảnh có kích thước $3 \times W \times H$ , đầu ra sẽ nhận được $3 \times W^{'} \times H^{'}$ với $W^{'} = \frac{W}{16}$ $H^{'} = \frac{H}{16}$
 
-	{% img  images/rpn/step-1.png 600  'Fast RCNN' %}
+	{% img  /images/rpn/step-1.png 600  'Fast RCNN' %}
 
 	Source: https://www.quora.com/How-does-the-region-proposal-network-RPN-in-Faster-R-CNN-work.
 
 2. __Sử dụng một cửa sổ trượt lên convolutional features .__
 	
- 	{% img  images/rpn/rpn.png 600  'RPN' %}
+ 	{% img  /images/rpn/rpn.png 600  'RPN' %}
 
 	Để tạo ra region proposals, chúng ta sử dụng một network hay còn gọi là cửa sổ trượt (sliding-window) kích thước $n \times n$ trượt trên convolutional features. Đầu ra của network này là đầu vào của 2 fully-connected layer dự đoán vị trí của regions (box-regression layer), cũng như xác suất chứa object(box-classification) của hộp ấy. Tại mỗi vị trí của cửa sổ trượt chúng ta dự đoán đồng thời nhiều nhiều region proposal cùng một lúc, với $k$ là số proposal tương ứng với mỗi vị trí. Vậy $reg$ layer có $4k$ đầu ra dự đoán vị trí của $k$ proposal,  $cls$ layer chứa $2k$ đầu ra dự đoán xác suất chứa vật thể của proposal.
 	
@@ -130,7 +130,7 @@ Cách hoạt động RPN có 2 bước chính
 
 #### Anchors
 
-{% img  images/rpn/anchors.png 600  'RPN' %}
+{% img  /images/rpn/anchors.png 600  'RPN' %}
 
 Sau khi đã có đầu ra của các region proposal, chúng ta sẽ tìm hiểu về khái niệm anchors. Tại mỗi vị trí của sliding window trên convolutional features, chúng ta tạo ra $k$ anchors tương ứng ở hình ảnh gốc. Trong bài báo, tác giả sử dụng 1 hình vuông, 2 hình chữ nhật với tỉ lệ chiều rộng, chiều dài là 1-2, 2-1, cùng với 3 kích cỡ khác nhau, như vậy $k = 3 \times 3 = 9$. 
 

@@ -22,11 +22,11 @@ Histogram of Oriented Gradients(HOG) là một thuật toán để trích xuất
 - HOG chia hình ảnh đầu vào thành một lưới các ô vuông
 - Mỗi ô vuông trích xuất thành một vector hướng của gradient trong cell đó
 
-{% img right images/06/hog_01.png 200 %}
+{% img right /images/06/hog_01.png 200 %}
 
 Trích dẫn một ví dụ về đầu ra của HOG từ trang [scikit-image.org](http://scikit-image.org/docs/dev/auto_examples/features_detection/plot_hog.html)
 
-{% img right images/06/hog_02.png 800 hehehe %}
+{% img right /images/06/hog_02.png 800 hehehe %}
 
 Từ ví dụ trên ta có thể thấy, trích xuất thuộc tính bằng HOG bảo toàn thông tin về đường viền của đối tượng trong ảnh, làm mất đi các thông tin về màu sắc, giảm độ sắc nét của dữ liệu. 
 
@@ -43,7 +43,7 @@ Sau khi đã có HOG feature descriptor, ta sẽ sử dụng vào bài toán obj
 3. Huấn luyện mạng SVM trên các HOG feature descriptor trên tập dữ liệu từ bước một và bước 2
 4. Đối với mỗi hình ảnh trong tập không chứa đối tượng, sử dụng phương pháp sliding window, tại mỗi vị trí cửa sổ tính toán giá trị HOG và sử dụng mô hình SVM đã huấn luyện ở trên để dự đoán kết quả. Nếu mô hình đưa ra kết quả sai, lưu lại giá trị HOG tương ứng tại vị trí cửa sổ đó cùng xác suất được dự đoán
 
-    {% img right images/06/sliding_window_example.gif 200 %}
+    {% img right /images/06/sliding_window_example.gif 200 %}
 
 5. Lấy các kết quả false-positive tìm thấy ở bước 4 , sắp xếp theo giá trị của xác suất và huấn luyện lại mô hình SVM
 6. Kết thúc
