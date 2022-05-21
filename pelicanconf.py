@@ -13,9 +13,9 @@ TIMEZONE = 'Asia/Tokyo'
 DEFAULT_LANG = 'vi'
 
 # Plugin
-PLUGIN_PATHS = ['plugins']
+# PLUGIN_PATHS = ['plugins']
 
-PLUGINS = ['pelican-bootstrapify', 'liquid-tags', 'pelican.plugins.render_math', 'series']
+PLUGINS = ['pelican.plugins.liquid_tags', 'pelican.plugins.render_math', 'series']
 
 
 LIQUID_TAGS = ["img", "literal", "video", "youtube",
@@ -23,13 +23,6 @@ LIQUID_TAGS = ["img", "literal", "video", "youtube",
 
 IGNORE_FILES = [".ipynb_checkpoints"]
 MARKUP = ('md', )
-
-
-BOOTSTRAPIFY = {
-    'table': ['table', 'table-striped', 'table-hover'],
-    'img': ['img-fluid'],
-    'blockquote': ['blockquote'],
-}
 
 DIRECT_TEMPLATES = ['index', 'tags', 'categories',
                     'authors', 'archives', 'sitemap']
@@ -64,9 +57,8 @@ GOOGLE_ANALYTICS = "UA-12027115-4"
 CODE_DIR = 'code'
 
 # copy CNAME
-STATIC_PATHS = ['images', 'code', 'downloads', 'extra/CNAME']
+STATIC_PATHS = ['images', 'code']
 EXTRA_PATH_METADATA = {
-    'extra/CNAME': {'path': 'CNAME'},
     'extra/favicon.ico': {'path': 'favicon.ico'}
 }
 
