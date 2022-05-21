@@ -10,7 +10,7 @@ PATH = 'content'
 
 TIMEZONE = 'Asia/Tokyo'
 
-DEFAULT_LANG = 'vi'
+DEFAULT_LANG = 'en'
 
 # Plugin
 # PLUGIN_PATHS = ['plugins']
