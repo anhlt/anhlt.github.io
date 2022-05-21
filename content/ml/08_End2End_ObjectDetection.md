@@ -20,14 +20,12 @@ Từ trước đến nay bài toán object detection thường dựa vào các t
 
 
 $$
-
-\left[\begin{array}{llll}
+\begin{array}{llll}
 30 & 40 & 50 & 60 \\
 70 & 30 & 40 & 70 \\
 60 & 50 & 60 & 30 \\
 20 & 80 & 50 & 70
-\end{array}\right]
-
+\end{array}
 $$
 
 
