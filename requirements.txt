@@ -1,4 +1,4 @@
-pelican[markdown]==4.6.0
+pelican[markdown]==4.7.2
 Markdown 
 ghp-import 
 beautifulsoup4 

@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*- #
 from __future__ import unicode_literals
 
-AUTHOR = 'Carol'
+AUTHOR = 'Walking_pup'
 SITENAME = 'Random Thoughts'
-SITEURL = 'https://deepmlml.com'
+SITEURL = 'https://anhlt.github.io'
 
 PATH = 'content'
 
