@@ -22,7 +22,7 @@ Khi sủ dụng một hệ quản trị cơ sở dữ liệu, thì một điều
 
 This is situation when a transaction could read uncommited changes from other transactions.
 
-```
+```bash
 ┌──────────────────────┬──────────────────────┐
 │                      │                      │
 │         T1           │         T2           │
