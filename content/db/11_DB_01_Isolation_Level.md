@@ -4,12 +4,12 @@ Slug:
 Date: 2022-05-21 12:17:14
 Modified: 2022-05-21 12:17:14
 Tags:  Transaction_Level, Database
-Category: Interview
+Category: TIL
 Author: h4cker
 Lang: vi
 Status: 
 Summary: Giải thích về Isolation Level
-Series: Database
+Series: Transaction in Database
 ---
 
 Khi sủ dụng một hệ quản trị cơ sở dữ liệu, thì một điều cần đáng phải quan tâm đó chính là xử lý song song các transaction. Khi bạn chỉ có một 
