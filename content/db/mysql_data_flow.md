@@ -51,6 +51,27 @@ _Steal_ : By allowing to replace dirty pages, there is some risk. If the transac
 
 ### REDO log (WAL log)
 
+Log record, there is 4 kind of log record in Redo log
+
+- _<START T>_ transaction T has begun
+- _<COMMIT T>_ transaction T has commited
+- _<ABORT T>_ transaction T 
+- _<T, X, V>_ transaction T has updated the element X with new value v
+  
+How do we recover ?
+
+```
+STEP    |1          |2          |3      |4          |5          |6      |7             | 8          | 9      | 10     |
+ACTION  |           |READ(A,t)  |T=T*2  |WRITE(A,t) |READ(B, t) |T=T*2  | WRITE (B, t) | COMMIT T   | FLUSH A| FLUSH B|
+MEM__A  |           |8          |       |16         |16         |16     |16            | 16         | 16     | 16     |
+MEM__B  |           |           |       |           |8          |8      |16            | 16         | 16     | 16     |
+DISK_A  |8          |8          |       |16         |16         |16     |16            | 16         | 16     | 16     |
+DISK_B  |8          |8          |       |8          |8          |8      |16            | 16         | 16     | 16     |
+REDO_L  |[START T]  |           |       |[T, A, 16] |           |       |[T, A, 16]    | [COMMIT T] |        |        |
+  
+```
+
+  
 
 
 
