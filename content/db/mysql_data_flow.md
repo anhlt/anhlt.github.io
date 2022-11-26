@@ -7,7 +7,7 @@ This is first part of 3 parts article "Flow of data in MySQL"
 
 ### RAM and Disk, Pages
 
-_How data are stored physically?_ TLDR: DBMS stored data in RAM and Disk
+_How is data stored physically?_ TLDR: DBMS stored data in RAM and Disk
 
 Many database are built using 2 types of memory to physically store data.
 
@@ -15,11 +15,9 @@ Many database are built using 2 types of memory to physically store data.
 - Disk: persistent storate. Disk allows us to store huge amount of data, and non-volatile. Sequence read/write speed in Disk is faster than random access.
 
 
-_How data are stored logically_? TLDR:  Table are stored in Files of Pages of Record.
+_How is data stored logically?_ TLDR:  Table are stored in Files of Pages of Record.
 
-Most of database split file in to same-sized pages, that ranges from 4KB to 16KB. Each page will be identify by **PageID**. 
-In one page there are many records, and each record will has the **location** in the page. 
-In order to access a particular record on Disk, we need to know the pair of **(PageID, location)**. 
+Most databases split files into same-sized pages, that range from 4KB to 16KB. Each page will be identified by _PageID_. In one page there are many records, and each record will have the _location_ in the page. To access a particular record on Disk, we need to know the _pointer_ as a pair of _(PageID, location)_.
 
 
 ### Buffer management strategy
