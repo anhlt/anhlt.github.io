@@ -1,3 +1,17 @@
+---
+Title: Flow of data in MySQL
+Slug: 
+Date: 2022-11-20 12:17:14
+Modified: 2022-11-20 12:17:14
+Tags:  Transaction_Level, Database
+Category: TIL
+Author: h4cker
+Lang: vi
+Status: 
+Summary: Introduce to Isolation Level
+Series: Transaction in Database
+---
+
 ## Flow of data in MySQL
 
 I will try to explain how MySQL write data to Disk, recovery , 
