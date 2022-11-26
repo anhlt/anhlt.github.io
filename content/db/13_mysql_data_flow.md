@@ -11,7 +11,6 @@ Status:
 Summary: Introduce to Isolation Level
 Series: Transaction in Database
 ---
-
 ## Flow of data in MySQL
 
 I will try to explain how MySQL write data to Disk, recovery , 
