@@ -1,15 +1,16 @@
 ---
 Title: Flow of data in MySQL
-Slug: 
-Date: 2022-11-20 12:17:14
-Modified: 2022-11-20 12:17:14
-Tags:  Transaction_Level, Database
+Slug: null
+Date: {}
+Modified: {}
+Tags: 'Transaction_Level, Database'
 Category: TIL
 Author: h4cker
 Lang: vi
-Status: 
+Status: null
 Summary: Introduce to Isolation Level
 Series: Transaction in Database
+published: true
 ---
 ## Flow of data in MySQL
 
@@ -66,10 +67,10 @@ _Steal_ : By allowing to replace dirty pages, there is some risk. If the transac
 
 Log record, there is 4 kind of log record in Redo log
 
-- _<START T>_ transaction T has begun
-- _<COMMIT T>_ transaction T has commited
-- _<ABORT T>_ transaction T 
-- _<T, X, V>_ transaction T has updated the element X with new value v
+- _[START T]>_ transaction T has begun
+- _[COMMIT T]_ transaction T has commited
+- _[ABORT T]_ transaction T 
+- _[T, X, V]_ transaction T has updated the element X with new value v
   
 How do we recover ?
 
