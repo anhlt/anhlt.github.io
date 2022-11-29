@@ -1,13 +1,13 @@
 ---
 Title: Flow of data in MySQL
-Slug: 
-Date: 2022-05-20 12:17:14
-Modified: 2022-05-20 12:17:14
+Slug: null
+Date: {}
+Modified: {}
 Tags: 'Transaction_Level, Database'
 Category: TIL
 Author: h4cker
 Lang: vi
-Status: 
+Status: null
 Summary: Data flow in Mysql
 Series: Transaction in Database
 published: true
@@ -96,8 +96,7 @@ Two important points of WAL log.
 
 
 
-
-![INNODB]({{site.baseurl}}/content/db/Screen Shot 2022-11-29 at 22.41.22.png)
+![InnoDB]({{site.baseurl}}/content/db/innodb.png)
 
 
   
