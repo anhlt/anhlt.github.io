@@ -113,7 +113,7 @@ If the system crashed before we wrote the [COMMIT T] to disk. We should abort th
 
 
 
-![data_flow_dbms.png]({{site.baseurl}}/content/db/data_flow_dbms.png)
+![data_flow_dbms.png]({{site.baseurl}}/content/db/data_flow.png)
 
 
 
