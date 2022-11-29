@@ -73,30 +73,38 @@ Log record, there is 4 kind of log record in Redo log
 - _[ABORT T]_ transaction T 
 - _[T, X, V]_ transaction T has updated the element X with new value v
   
-How do we recover ?
 
 ```
 STEP    |1          |2          |3      |4          |5          |6      |7             | 8          | 9      | 10     |
 ACTION  |           |READ(A,t)  |T=T*2  |WRITE(A,t) |READ(B, t) |T=T*2  | WRITE (B, t) | COMMIT T   | FLUSH A| FLUSH B|
 MEM__A  |           |8          |       |16         |16         |16     |16            | 16         | 16     | 16     |
 MEM__B  |           |           |       |           |8          |8      |16            | 16         | 16     | 16     |
-DISK_A  |8          |8          |       |16         |16         |16     |16            | 16         | 16     | 16     |
-DISK_B  |8          |8          |       |8          |8          |8      |16            | 16         | 16     | 16     |
+DISK_A  |8          |8          |       |8          |8          |8      |8             | 8          | 16     | 16     |
+DISK_B  |8          |8          |       |8          |8          |8      |8             | 8          | 8      | 16     |
 REDO_L  |[START T]  |           |       |[T, A, 16] |           |       |[T, A, 16]    | [COMMIT T] |        |        |
   
 ```
 
 
-
-
 Two important points of WAL log.
 
-1. The data changes operation should be write to WAL log before write to Disk
+1. The operations should be write to WAL log buffer before write to pages
+    In the 4th step, we need to write the redo log [T, A, 16] before update the value of A in memory
+    In the 7th step, we need to write the redo log [T, B, 16] before update the value of B in memory
+
 2. Must **force** all log record for a transaction before commit
+    In the 8th step, we need to flush all the previous log entries and the [COMMIT T] to disk before return success response.
 
 
+If the system crashed after we wrote the [COMMIT T] to disk. In the WAL log on disk we have
 
-![InnoDB]({{site.baseurl}}/content/db/innodb.png)
+```
+[START T] |[T, A, 16] |           |       |[T, A, 16]    | [COMMIT T]
+```
+So we can redo the the log.
+
+If the system crashed before we wrote the [COMMIT T] to disk. We should abort the transaction T. 
+
 
 
   
