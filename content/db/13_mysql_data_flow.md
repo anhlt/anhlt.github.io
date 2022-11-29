@@ -1,13 +1,13 @@
 ---
 Title: Flow of data in MySQL
 Slug: hello
-Date: 2020-06-10 12:52:25
-Modified: 2020-06-10 12:52:25
+Date: {}
+Modified: {}
 Tags: 'Transaction_Level, Database'
 Category: TIL
 Author: h4cker
 Lang: vi
-Status: 
+Status: null
 Summary: Data flow in Mysql
 Series: Transaction in Database
 published: true
@@ -99,7 +99,7 @@ Two important points of WAL log.
 If the system crashed after we wrote the [COMMIT T] to disk. In the WAL log on disk we have
 
 ```
-[START T] |[T, A, 16] |           |       |[T, A, 16]    | [COMMIT T]
+[START T], [T, A, 16] ,[T, A, 16] , [COMMIT T]
 ```
 So we can redo the the log.
 
