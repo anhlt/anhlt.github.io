@@ -1,13 +1,13 @@
 ---
 Title: Flow of data in MySQL
-Slug: null
-Date: 2020-06-10T12:52:25.000Z
-Modified: 2020-06-10T12:52:25.000Z
+Slug: hello
+Date: 2020-06-10 12:52:25
+Modified: 2020-06-10 12:52:25
 Tags: 'Transaction_Level, Database'
 Category: TIL
 Author: h4cker
 Lang: vi
-Status: null
+Status: 
 Summary: Data flow in Mysql
 Series: Transaction in Database
 published: true
