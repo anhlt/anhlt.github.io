@@ -10,7 +10,7 @@ Lang: vi
 Status: null
 Summary: Introduce to Isolation Level
 Series: Transaction in Database
-published: true
+published: false
 ---
 ## Flow of data in MySQL
 
