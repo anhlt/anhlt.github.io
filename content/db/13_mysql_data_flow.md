@@ -8,9 +8,9 @@ Category: TIL
 Author: h4cker
 Lang: vi
 Status: null
-Summary: Introduce to Isolation Level
+Summary: Data flow in Mysql
 Series: Transaction in Database
-published: false
+published: true
 ---
 ## Flow of data in MySQL
 
