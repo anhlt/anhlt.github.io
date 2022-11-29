@@ -65,9 +65,10 @@ _Steal_ : By allowing to replace dirty pages, there is some risk. If the transac
 
 ### REDO log (WAL log)
 
+Basic idea, for every operation on buffer pages, we will record that operation to WAL log.
 Log record, there is 4 kind of log record in Redo log
 
-- _[START T]>_ transaction T has begun
+- _[START T]_ transaction T has begun
 - _[COMMIT T]_ transaction T has commited
 - _[ABORT T]_ transaction T 
 - _[T, X, V]_ transaction T has updated the element X with new value v
@@ -85,12 +86,26 @@ REDO_L  |[START T]  |           |       |[T, A, 16] |           |       |[T, A, 
   
 ```
 
+
+
+
+Two important points of WAL log.
+
+1. The data changes operation should be write to WAL log before write to Disk
+2. Must **force** all log record for a transaction before commit
+
+
+
+
+![INNODB]({{site.baseurl}}/content/db/Screen Shot 2022-11-29 at 22.41.22.png)
+
+
   
 
 
 
 ### Log
 
-- WAL
+
 - Undo log MVCC
 -
