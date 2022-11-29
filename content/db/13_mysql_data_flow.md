@@ -115,10 +115,25 @@ If the system crashed before we wrote the [COMMIT T] to disk. We should abort th
 
 ![data_flow_dbms.png]({{site.baseurl}}/content/db/data_flow.png)
 
+As we see in the step 4. If the pageLSN in buffer-pool is larger than flushedLSN, we not allow to force the page to disk, because we will lose information in LSN in case of system crash. 
+If the pageLSN smaller than flushedLSN, we are allow to replace the pages with other pages.
+
+
+
+## UNDO Log
+
+### Undo log structure
+
+### MVCC and Undo Log
 
 
 
 
+
+
+
+
+## Overall architecture of MySQL
 
 ![innodb.png]({{site.baseurl}}/content/db/innodb.png)
 
