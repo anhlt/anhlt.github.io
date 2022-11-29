@@ -1,8 +1,8 @@
 ---
 Title: Flow of data in MySQL
 Slug: null
-Date: {}
-Modified: {}
+Date: 2020-06-10T12:52:25.000Z
+Modified: 2020-06-10T12:52:25.000Z
 Tags: 'Transaction_Level, Database'
 Category: TIL
 Author: h4cker
