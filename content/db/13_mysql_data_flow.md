@@ -89,10 +89,12 @@ REDO_L  |[START T]  |           |       |[T, A, 16] |           |       |[T, A, 
 Two important points of WAL log.
 
 1. The operations should be write to WAL log buffer before write to pages
-    In the 4th step, we need to write the redo log [T, A, 16] before update the value of A in memory
+
+	In the 4th step, we need to write the redo log [T, A, 16] before update the value of A in memory
     In the 7th step, we need to write the redo log [T, B, 16] before update the value of B in memory
 
 2. Must **force** all log record for a transaction before commit
+    
     In the 8th step, we need to flush all the previous log entries and the [COMMIT T] to disk before return success response.
 
 
