@@ -109,6 +109,20 @@ If the system crashed before we wrote the [COMMIT T] to disk. We should abort th
 
 
 
+#### The flow of data
+
+
+
+![data_flow_dbms.png]({{site.baseurl}}/content/db/data_flow_dbms.png)
+
+
+
+
+
+
+![innodb.png]({{site.baseurl}}/content/db/innodb.png)
+
+
   
 
 
