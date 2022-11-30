@@ -14,18 +14,8 @@ published: true
 ---
 ## Flow of data in MySQL
 
-I will try to explain how MySQL write data to Disk, recovery , 
+I will try to explain how MySQL write data to Disk, recovery, WAL log, MVCC
 
-This is first part of 3 parts article "Flow of data in MySQL"
-
-### ACID properties
-
-**Atomicity:** All actions in transaction happens or none happen at all
-**Consistency** 
-
-**Isolation**
-
-**Durability**
 
 
 ### RAM and Disk, Pages
@@ -45,7 +35,7 @@ Most databases split files into same-sized pages, that range from 4KB to 16KB. E
 
 ### Buffer management 
 
-Because we cannot modify data directly on disk, we need to load data from Disk to Ram, modify, then write back to disk to persist data. The perpose of buffer management is providing the illusion that we are operating in memory. Buffer manage map the pages in memory to pages in disk.
+Because we cannot modify data directly on disk, we need to load data from Disk to RAM, modify, then write back to disk to persist data. The perpose of buffer management is providing the illusion that we are operating in memory. Buffer manage map the pages in memory to pages in disk.
 
 The size of RAM is much smaller than Disk, so we need the strategy for loading pages into RAM, and flushing pages in to Disk. 
 
@@ -55,11 +45,12 @@ _Force_ means when the trx1 commit, all the affected pages in memory need to be 
 
 Let's think about No Steal Policy, We don't allow the pages with uncommited changes to be replaced. This is useful for archieving atomicity without UNDO logging. But also need to keep many pages in memory
 
-If we make sure every update id forced onto disk before commit, we are provided durability, but it also cause poor performance by lot of random IO to commit
+If we make sure every update are forced onto disk before commit, we are provided durability, but it also cause poor performance by lot of random IO to commit
 
-Our prefer strategy is  Steal / No-Force
+**Our prefer strategy is  Steal / No-Force**
 
 _No Force_ : We don't need to flush modified pages to disk before commit. In stead we will using 2 other data struct to store the changes. _Redo log buffer_ in ram and _Redo Log_ in Disk. Before we update any record in pages on buffer pool, we appending a new log entry of _Redo log buffer_ , and before we commit we will persist the log entries in _Redo log buffer_ to _Redo log_. Instead of randomy flush the pages to disk, we now write the Redo log sequentially to disk.
+
 
 _Steal_ : By allowing to replace dirty pages, there is some risk. If the transaction is abort, how can we restore to previous value? What if the system crash before the transaction finished? We need undo log
 
@@ -91,11 +82,12 @@ Two important points of WAL log.
 1. The operations should be write to WAL log buffer before write to pages
 
 	In the 4th step, we need to write the redo log [T, A, 16] before update the value of A in memory
+    
     In the 7th step, we need to write the redo log [T, B, 16] before update the value of B in memory
 
 2. Must **force** all log record for a transaction before commit
     
-    In the 8th step, we need to flush all the previous log entries and the [COMMIT T] to disk before return success response.
+    In the 8th step, we need to flush all the previous log entries and the [COMMIT T] to WAL log in Disk before return success response.
 
 
 If the system crashed after we wrote the [COMMIT T] to disk. In the WAL log on disk we have
@@ -105,13 +97,14 @@ If the system crashed after we wrote the [COMMIT T] to disk. In the WAL log on d
 ```
 So we can redo the the log.
 
-If the system crashed before we wrote the [COMMIT T] to disk. We should abort the transaction T. 
+If the system crashed before we wrote the [COMMIT T] to disk. We should ignore the transaction T. 
 
+```
+[START T], [T, A, 16] ,[T, A, 16]
+```
 
 
 #### The flow of data
-
-
 
 ![data_flow_dbms.png]({{site.baseurl}}/content/db/data_flow.png)
 
@@ -120,14 +113,32 @@ If the pageLSN smaller than flushedLSN, we are allow to replace the pages with o
 
 
 
+## Recovery.
+
+![Recovery.png]({{site.baseurl}}/content/db/Recovery.png)
+
+
+
 ## UNDO Log
 
-### Undo log structure
-
-### MVCC and Undo Log
+As you can see that when we update the the value of any record, we update directly to the pages on buffer pool. How can we revert the value when abort the transaction? To do that, we need to save the old value in some place called UNDO log. By using undo log, we can also provide MVCC for transaction.
 
 
+### Mysql data layout
 
+![B_tree.png From O'Reilly.High.Performance.MySQL.3rd.Edition]({{site.baseurl}}/content/db/B_tree.png)
+
+In InnoDB the clustered index is actually the table. The leaf node in the clustered index contains the PK value, the transaction ID, the rollback pointer for transactional and MVC, and the rest of the columns.
+
+The rollback pointer points to the UNDO logs that storing the previous values of the record.
+
+### UNDO Log Entry.
+
+There are 2 types of entry in UNDO Log.
+
+- Insert entry, for new record, we don't have previous value, but we still need to insert the Inserting entry to UNDO log before update the record value in buffer pool.
+
+- Update entry, before we update any record in buffer page, we need to record 
 
 
 
