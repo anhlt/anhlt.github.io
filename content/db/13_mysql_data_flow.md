@@ -12,13 +12,13 @@ Summary: Data flow in Mysql
 Series: Transaction in Database
 published: true
 ---
-## Flow of data in MySQL
+# Flow of data in MySQL
 
 I will try to explain how MySQL write data to Disk, recovery, WAL log, MVCC
 
 
 
-### RAM and Disk, Pages
+# RAM and Disk, Pages
 
 _How is data stored physically?_ TLDR: DBMS stored data in RAM and Disk
 
@@ -33,7 +33,7 @@ _How is data stored logically?_ TLDR:  Table are stored in Files of Pages of Rec
 Most databases split files into same-sized pages, that range from 4KB to 16KB. Each page will be identified by _PageID_. In one page there are many records, and each record will have the _location_ in the page. To access a particular record on Disk, we need to know the _pointer_ as a pair of _(PageID, location)_.
 
 
-### Buffer management 
+# Buffer management 
 
 Because we cannot modify data directly on disk, we need to load data from Disk to RAM, modify, then write back to disk to persist data. The perpose of buffer management is providing the illusion that we are operating in memory. Buffer manage map the pages in memory to pages in disk.
 
@@ -54,7 +54,7 @@ _No Force_ : We don't need to flush modified pages to disk before commit. In ste
 
 _Steal_ : By allowing to replace dirty pages, there is some risk. If the transaction is abort, how can we restore to previous value? What if the system crash before the transaction finished? We need undo log
 
-### REDO log (WAL log)
+# REDO log (WAL log)
 
 Basic idea, for every operation on buffer pages, we will record that operation to WAL log.
 Log record, there is 4 kind of log record in Redo log
@@ -104,7 +104,7 @@ If the system crashed before we wrote the [COMMIT T] to disk. We should ignore t
 ```
 
 
-#### The flow of data
+# The flow of data
 
 ![data_flow_dbms.png]({{site.baseurl}}/content/db/data_flow.png)
 
@@ -113,48 +113,53 @@ If the pageLSN smaller than flushedLSN, we are allow to replace the pages with o
 
 
 
-## Recovery.
+# Recovery.
 
 ![Recovery.png]({{site.baseurl}}/content/db/Recovery.png)
 
 
 
-## UNDO Log
+# UNDO Log
 
 As you can see that when we update the the value of any record, we update directly to the pages on buffer pool. How can we revert the value when abort the transaction? To do that, we need to save the old value in some place called UNDO log. By using undo log, we can also provide MVCC for transaction.
 
 
-### Mysql data layout
+## Mysql data layout
 
 ![B_tree.png From O'Reilly.High.Performance.MySQL.3rd.Edition]({{site.baseurl}}/content/db/B_tree.png)
 
-In InnoDB the clustered index is actually the table. The leaf node in the clustered index contains the PK value, the transaction ID, the rollback pointer for transactional and MVC, and the rest of the columns.
+In InnoDB the clustered index is actually the table. The leaf node in the clustered index contains 
 
-The rollback pointer points to the UNDO logs that storing the previous values of the record.
+- the PK value
+- the transaction ID
+- the rollback pointer for transactional and MVCC
+- the rest of the columns.
 
-### UNDO Log Entry.
+
+## UNDO Log Entry.
 
 There are 2 types of entry in UNDO Log.
 
-- Insert entry, for new record, we don't have previous value, but we still need to insert the Inserting entry to UNDO log before update the record value in buffer pool.
-
-- Update entry, before we update any record in buffer page, we need to record 
+**Insert entry**, for new record, we don't have previous value, but we still need to insert the Inserting entry to UNDO log before update the record value in buffer pool.
 
 
 
+**Update entry**, before we update any record in buffer page, we need to add new update entry with current value of the record to the UNDO log , and then update the value on buffer pool.
 
 
-## Overall architecture of MySQL
+
+## Undo Log Entry
+
+- Every transaction will have one undo log entry.
+
+
+![UNDO.png]({{site.baseurl}}/content/db/UNDO.png)
+
+
+
+
+
+# Overall architecture of MySQL
 
 ![innodb.png]({{site.baseurl}}/content/db/innodb.png)
 
-
-  
-
-
-
-### Log
-
-
-- Undo log MVCC
--
