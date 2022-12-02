@@ -32,6 +32,8 @@ _How is data stored logically?_ TLDR:  Table are stored in Files of Pages of Rec
 
 Most databases split files into same-sized pages, that range from 4KB to 16KB. Each page will be identified by _PageID_. In one page, there are many records, and each record will have the _location_ in the page. To access a particular record on Disk, we need to know the _pointer_ as a pair of _(PageID, location)_.
 
+![Page_buffer_disk.png]({{site.baseurl}}/content/db/Page_buffer_disk.png)
+
 
 # Buffer management 
 
@@ -39,11 +41,17 @@ Because we cannot modify data directly on disk, we need to load data from Disk t
 
 The size of RAM is much smaller than Disk, so we need the strategy for loading pages into RAM, and flushing pages in to Disk. There are 2 properties that we need to think about in buffer management.
 
-_Steal_ Suppose an transaction _Trx1_ want to read data from page _P1_, but the memory is already full as other transactions load other pages to memory, So _Trx1_ needs to clear some memory, by flush other pages from memory to disk, remove that pages from memory, then load the needed pages from disk to memory. 
+**_Steal_** Suppose an transaction _Trx1_ want to read data from page _P1_, but the memory is already full as other transactions load other pages to memory, So _Trx1_ needs to clear some memory, by flush other pages from memory to disk, remove that pages from memory, then load the needed pages from disk to memory. 
 
-_Force_ means when the trx1 commit, all the affected pages in memory need to be flushed to disk. 
+**_Force_** means when the trx1 commit, all the affected pages in memory need to be flushed to disk. 
 
-Let's think about _No Steal Policy_, We don't allow the pages with uncommited changes to be replaced. This is useful for archieving atomicity without UNDO logging. But also need to keep many pages in memory
+
+
+Let's think about  **No Steal Policy** , We don't allow the pages with uncommited changes to be replaced. This is useful for archieving atomicity without UNDO logging. But also need to keep many pages in memory
+
+![Steal.png]({{site.baseurl}}/content/db/Steal.png)
+
+
 
 If we make sure every update are forced onto disk before commit, we are provided durability, but it also cause poor performance by lot of random IO to commit
 
