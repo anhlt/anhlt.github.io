@@ -114,6 +114,13 @@ If the system crashed before we wrote the [COMMIT T] to disk. We should ignore t
 
 # The flow of data
 
+A log sequence number (LSN) represents the offset, in bytes, of a log record from the beginning of a database log file
+
+FlushedLSN represent the last LSN that have been flushed to Disk
+
+PageLSN represent the LSN of last log entry, which updated this page
+
+
 ![data_flow_dbms.png]({{site.baseurl}}/content/db/data_flow.png)
 
 As we see in the step 4. If the pageLSN in buffer-pool is larger than flushedLSN, we not allow to force the page to disk, because we will lose information in LSN in case of system crash. 
