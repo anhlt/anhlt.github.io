@@ -14,7 +14,8 @@ published: true
 ---
 # Flow of data in MySQL
 
-I will try to explain how MySQL write data to Disk, recovery, WAL log, MVCC
+I will try to explain how MySQL write data to Disk, recovery, WAL log, 
+MVCC.  Multiple Version CC
 
 
 
@@ -25,7 +26,7 @@ _How is data stored physically?_ TLDR: DBMS stored data in RAM and Disk
 Many database are built using 2 types of memory to physically store data.
 
 - RAM: Random access memory or main memory. RAM allows us to access and modify data randomly and fast, the downside of ram is this is volatile, the data in ram will be erased when the computer restart, and the size of RAM is relatively smaller than Disk. 
-- Disk: persistent storate. Disk allows us to store huge amount of data, and non-volatile. Sequence read/write speed in Disk is faster than random access.
+- Disk: persistent storage. Disk allows us to store huge amount of data, and non-volatile. Sequence read/write speed in Disk is faster than random access on Disk.
 
 
 _How is data stored logically?_ TLDR:  Table are stored in Files of Pages of Record.
@@ -71,6 +72,24 @@ Log record, there is 4 kind of log record in Redo log
 - _[COMMIT T]_ transaction T has commited
 - _[ABORT T]_ transaction T 
 - _[T, X, V]_ transaction T has updated the element X with new value v
+
+```
+BEGIN
+
+SELECT value FROM table where ID  = A
+
+UPDATE table SET value = 16 where ID = A
+
+SELECT value FROM table where ID  = B
+
+
+UPDATE table SET value = 16 where ID = B
+
+COMMIT
+
+
+
+```
   
 
 ```
