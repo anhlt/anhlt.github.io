@@ -1,14 +1,16 @@
+---
 Title: Flow of data in MySQL
-Slug: hello
+Slug: mysql-data-flow
 Date: 2023-02-27 12:17:14
 Modified: 2023-02-27 12:17:14
-Tags: 'Transaction_Level, Database'
+Tags:  Transaction_Level, Database
 Category: TIL
 Author: h4cker
 Lang: vi
-Status: null
-Summary: Data flow in Mysql
+Status: 
+Summary: Introduce to Isolation Level
 Series: Transaction in Database
+---
 
 # Flow of data in MySQL
 
