@@ -1,4 +1,3 @@
----
 Title: Flow of data in MySQL
 Slug: hello
 Date: 2023-02-27 12:17:14
@@ -10,8 +9,7 @@ Lang: vi
 Status: null
 Summary: Data flow in Mysql
 Series: Transaction in Database
-published: true
----
+
 # Flow of data in MySQL
 
 I will try to explain how MySQL write data to Disk, recovery, WAL log, 
