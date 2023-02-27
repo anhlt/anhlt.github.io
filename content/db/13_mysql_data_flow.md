@@ -1,8 +1,8 @@
 ---
 Title: Flow of data in MySQL
 Slug: hello
-Date: {}
-Modified: {}
+Date: 2023-02-27 12:17:14
+Modified: 2023-02-27 12:17:14
 Tags: 'Transaction_Level, Database'
 Category: TIL
 Author: h4cker
