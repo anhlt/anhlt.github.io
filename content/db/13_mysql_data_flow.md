@@ -8,14 +8,14 @@ Category: TIL
 Author: h4cker
 Lang: vi
 Status: 
-Summary: Introduce to Isolation Level
+Summary: I will try to explain how MySQL write data to Disk, recovery, WAL log, MVCC
 Series: Transaction in Database
 ---
 
 # Flow of data in MySQL
 
 I will try to explain how MySQL write data to Disk, recovery, WAL log, 
-MVCC.  Multiple Version CC
+MVCC.
 
 
 
