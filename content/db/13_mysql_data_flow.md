@@ -33,8 +33,8 @@ _How is data stored logically?_ TLDR:  Table are stored in Files of Pages of Rec
 
 Most databases split files into same-sized pages, that range from 4KB to 16KB. Each page will be identified by _PageID_. In one page, there are many records, and each record will have the _location_ in the page. To access a particular record on Disk, we need to know the _pointer_ as a pair of _(PageID, location)_.
 
-![Page_buffer_disk.png]({{site.baseurl}}/content/db/Page_buffer_disk.png)
 
+{% img  /images/13/Page_buffer_disk.png 600  'Page_buffer_disk' %}
 
 # Buffer management 
 
@@ -50,7 +50,8 @@ The size of RAM is much smaller than Disk, so we need the strategy for loading p
 
 Let's think about  **No Steal Policy** , We don't allow the pages with uncommited changes to be replaced. This is useful for archieving atomicity without UNDO logging. But also need to keep many pages in memory
 
-![Steal.png]({{site.baseurl}}/content/db/Steal.png)
+
+{% img  /images/13/Steal.png 600  'Steal' %}
 
 
 
@@ -140,7 +141,8 @@ FlushedLSN represent the last LSN that have been flushed to Disk
 PageLSN represent the LSN of last log entry, which updated this page
 
 
-![data_flow_dbms.png]({{site.baseurl}}/content/db/data_flow.png)
+
+{% img  /images/13/data_flow.png 600  'data_flow' %}
 
 As we see in the step 4. If the pageLSN in buffer-pool is larger than flushedLSN, we not allow to force the page to disk, because we will lose information in LSN in case of system crash. 
 If the pageLSN smaller than flushedLSN, we are allow to replace the pages with other pages.
@@ -149,7 +151,8 @@ If the pageLSN smaller than flushedLSN, we are allow to replace the pages with o
 
 # Recovery.
 
-![Recovery.png]({{site.baseurl}}/content/db/Recovery.png)
+
+{% img  /images/13/Recovery.png 600  'Recovery' %}
 
 
 
@@ -160,7 +163,7 @@ As you can see that when we update the the value of any record, we update direct
 
 ## Mysql data layout
 
-![B_tree.png From O'Reilly.High.Performance.MySQL.3rd.Edition]({{site.baseurl}}/content/db/B_tree.png)
+{% img  /images/13/B_tree.png 600  'B_tree' %}
 
 In InnoDB the clustered index is actually the table. The leaf node in the clustered index contains 
 
@@ -195,7 +198,9 @@ We could think the UNDO log for every record is a **linked-list** with head is l
 
 
 
-![UNDO.png]({{site.baseurl}}/content/db/UNDO.png)
+
+
+{% img  /images/13/UNDO.png 600  'UNDO' %}
 
 
 
@@ -205,7 +210,8 @@ We could think the UNDO log for every record is a **linked-list** with head is l
 
 # Overall architecture of MySQL
 
-![innodb.png]({{site.baseurl}}/content/db/innodb.png)
+
+{% img  /images/13/innodb.png 600  'innodb' %}
 
 
 https://excalidraw.com/#json=gk8L0m-mg9viqWyc_0MTl,F44tZbzcuRKQaTzrP4avJg
