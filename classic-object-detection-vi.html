@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <!-- Required meta tags -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+  <title>  Bài toán Object Detection cổ điển | Random Thoughts
+</title>
+  <link rel="canonical" href="https://anhlt.github.io/classic-object-detection-vi.html">
+
+
+  <link rel="stylesheet" href="https://anhlt.github.io/theme/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://anhlt.github.io/theme/css/fontawesome.min.css">
+  <link rel="stylesheet" href="https://anhlt.github.io/theme/css/pygments/default.min.css">
+  <link rel="stylesheet" href="https://anhlt.github.io/theme/css/theme.css">
+
+  <link rel="alternate" type="application/atom+xml" title="Full Atom Feed"
+        href="https://anhlt.github.io/feeds/all.atom.xml">
+  <link rel="alternate" type="application/atom+xml" title="Categories Atom Feed"
+        href="https://anhlt.github.io/feeds/deep-learning.atom.xml">  
+  <meta name="description" content="Giới thiệu bài toán Object Detection cổ điển, từ đó nắm bắt được ý tưởng của các thuật toán Deep Learing phức tạp hơn">
+  <script>
+    (function(i, s, o, g, r, a, m) {
+      i['GoogleAnalyticsObject'] = r;
+      i[r] = i[r] || function() {
+        (i[r].q = i[r].q || []).push(arguments)
+      }, i[r].l = 1 * new Date();
+      a = s.createElement(o);
+      a.async = 1;
+      a.src = g;
+      m = s.getElementsByTagName(o)[0];
+      m.parentNode.insertBefore(a, m)
+    })(window, document, 'script', 'https://www.google-analytics.com/analytics.js', 'ga');
+    ga('create', 'UA-12027115-4', 'auto');
+    ga('send', 'pageview');
+  </script>
+
+
+</head>
+
+<body>
+  <header class="header">
+    <div class="container">
+<div class="row">
+  <div class="col-sm-12">
+    <h1 class="title"><a href="https://anhlt.github.io/">Random Thoughts</a></h1>
+      <p class="text-muted">✨ Suy nghĩ vu vơ</p>
+  </div>
+</div>    </div>
+  </header>
+
+  <div class="main">
+    <div class="container">
+      <h1>  Bài toán Object Detection cổ điển
+</h1>
+      <hr>
+  <article class="article">
+    <header>
+      <ul class="list-inline">
+        <li class="list-inline-item text-muted" title="2018-01-16T19:18:33+09:00">
+          <i class="fas fa-clock"></i>
+          Tue 16 January 2018
+        </li>
+        <li class="list-inline-item">
+          <i class="fas fa-folder-open"></i>
+          <a href="https://anhlt.github.io/category/deep-learning.html">Deep Learning</a>
+        </li>
+          <li class="list-inline-item">
+            <i class="fas fa-user"></i>
+              <a href="https://anhlt.github.io/author/h4cker.html">h4cker</a>          </li>
+          <li class="list-inline-item">
+            <i class="fas fa-tag"></i>
+              <a href="https://anhlt.github.io/tag/vietnamese.html">#vietnamese</a>,               <a href="https://anhlt.github.io/tag/explained.html">#explained</a>,               <a href="https://anhlt.github.io/tag/object_detection.html">#object_detection</a>          </li>
+      </ul>
+    </header>
+    <div class="content">
+      <p>Nhiều năm về trước, bài toán object detection thường sử dụng những thuật toán đơn giản, tốc độ tính toán nhanh, nhưng bù lại độ chính xác không tốt như sử dụng deep learning. Mặc dù vậy, để hiểu rõ hơn về ý tưởng của các thuật toán phức tạp hơn, hôm nay mình muốn giới thiệu ý tưởng của 1 thuật toán cổ điển, sử dụng HOG. Mục đích của bài viết này chỉ là giới thiệu về ý tưởng của thuật toán , nên mình sẽ không code bài toán này. </p>
+<h3 id="trich-xuat-thuoc-tinh">Trích xuất thuộc tính</h3>
+<p>Trích xuất thuộc tính(feature extraction) là một quá trình nhằm biến dữ liệu phức tạp đầu vào thành một cách biểu diễn dữ liệu đơn giản hơn, phù hợp hơn cho các thuật toán học máy. Dữ liệu sau khi xử lý đã được lược bỏ phần dữ liệu dư thừa, giữ lại những dữ liệu có ích cho bài toán cần xử lý.</p>
+<p>Trong bài toán object detection, đầu vào của dữ liệu là hình ảnh , vì thế để đơn giản hơn cho việc tính toán chúng ra sử dụng một số thuật toán để trích xuất như HOG, SIFT. Trong nội dung bài viết này, tôi không đi sâu về các thuật toán trích xuất dữ liệu này.</p>
+<h3 id="histogram-of-oriented-gradients">Histogram of Oriented Gradients</h3>
+<p>Histogram of Oriented Gradients(HOG) là một thuật toán để trích xuất thuộc tính hình ảnh. Vậy cụ thể HOG có đầu ra như thế nào. </p>
+<ul>
+<li>HOG chia hình ảnh đầu vào thành một lưới các ô vuông</li>
+<li>Mỗi ô vuông trích xuất thành một vector hướng của gradient trong cell đó</li>
+</ul>
+<p><img class="right" src="/images/06/hog_01.png" width="200"></p>
+<p>Trích dẫn một ví dụ về đầu ra của HOG từ trang <a href="http://scikit-image.org/docs/dev/auto_examples/features_detection/plot_hog.html">scikit-image.org</a></p>
+<p><img class="right" src="/images/06/hog_02.png" width="800" title="hehehe" alt="hehehe"></p>
+<p>Từ ví dụ trên ta có thể thấy, trích xuất thuộc tính bằng HOG bảo toàn thông tin về đường viền của đối tượng trong ảnh, làm mất đi các thông tin về màu sắc, giảm độ sắc nét của dữ liệu. </p>
+<p>Thông thường, đầu vào của một hình ảnh có kích thước <span class="math">\(W x H x 3\)</span> , đầu ra của HOG là vector 1-D <span class="math">\(N x 1\)</span></p>
+<p>Đã có một bài viết tiếng Việt đề cập khá cụ thể về cách tính HOG feature từ <a href="https://viblo.asia/p/tim-hieu-ve-hoghistogram-of-oriented-gradients-m68Z0wL6KkG">Viblo</a>. Các bạn có thể tham khảo thêm</p>
+<h3 id="sliding-window">Sliding Window</h3>
+<p>Sau khi đã có HOG feature descriptor, ta sẽ sử dụng vào bài toán object detector. Phần này tôi sẽ lược dịch từ trang <a href="https://www.pyimagesearch.com/2014/11/10/histogram-oriented-gradients-object-detection/">pyimagesearch.com</a></p>
+<ol>
+<li>Lấy ra số lượng P các hỉnh ảnh chưa đối tượng và trích xuât HOG feature descriptor từ các hình ảnh này</li>
+<li>Lấy ra N các hình ảnh không chưa bất kì một đối tượng nào và trích xuất HOG feature descriptor từ các hình ảnh này. Trong thực tế thì <span class="math">\(N &gt;&gt; P\)</span>  </li>
+<li>Huấn luyện mạng SVM trên các HOG feature descriptor trên tập dữ liệu từ bước một và bước 2</li>
+<li>
+<p>Đối với mỗi hình ảnh trong tập không chứa đối tượng, sử dụng phương pháp sliding window, tại mỗi vị trí cửa sổ tính toán giá trị HOG và sử dụng mô hình SVM đã huấn luyện ở trên để dự đoán kết quả. Nếu mô hình đưa ra kết quả sai, lưu lại giá trị HOG tương ứng tại vị trí cửa sổ đó cùng xác suất được dự đoán</p>
+<p><img class="right" src="/images/06/sliding_window_example.gif" width="200"></p>
+</li>
+<li>
+<p>Lấy các kết quả false-positive tìm thấy ở bước 4 , sắp xếp theo giá trị của xác suất và huấn luyện lại mô hình SVM</p>
+</li>
+<li>Kết thúc</li>
+</ol>
+<h3 id="loi-ket">Lời kết</h3>
+<p>Giải quyết bài toán object detection bằng các phương pháp cổ điển có ưu điểm là cần năng lực tính toán thấp, mô hình đơn giản, tốc độ xử lý nhanh. Nhưng trong quá trình xử lý làm mất đi nhiều thông tin giá trị của hình ảnh như màu sắc, độ sắc nét. Dẫn tới độ chính xác không cao.</p>
+<script type="text/javascript">if (!document.getElementById('mathjaxscript_pelican_#%@#$@#')) {
+    var align = "center",
+        indent = "0em",
+        linebreak = "false";
+
+    if (false) {
+        align = (screen.width < 768) ? "left" : align;
+        indent = (screen.width < 768) ? "0em" : indent;
+        linebreak = (screen.width < 768) ? 'true' : linebreak;
+    }
+
+    var mathjaxscript = document.createElement('script');
+    mathjaxscript.id = 'mathjaxscript_pelican_#%@#$@#';
+    mathjaxscript.type = 'text/javascript';
+    mathjaxscript.src = 'https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.3/latest.js?config=TeX-AMS-MML_HTMLorMML';
+
+    var configscript = document.createElement('script');
+    configscript.type = 'text/x-mathjax-config';
+    configscript[(window.opera ? "innerHTML" : "text")] =
+        "MathJax.Hub.Config({" +
+        "    config: ['MMLorHTML.js']," +
+        "    TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'none' } }," +
+        "    jax: ['input/TeX','input/MathML','output/HTML-CSS']," +
+        "    extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']," +
+        "    displayAlign: '"+ align +"'," +
+        "    displayIndent: '"+ indent +"'," +
+        "    showMathMenu: true," +
+        "    messageStyle: 'normal'," +
+        "    tex2jax: { " +
+        "        inlineMath: [ ['\\\\(','\\\\)'] ], " +
+        "        displayMath: [ ['$$','$$'] ]," +
+        "        processEscapes: true," +
+        "        preview: 'TeX'," +
+        "    }, " +
+        "    'HTML-CSS': { " +
+        "        availableFonts: ['STIX', 'TeX']," +
+        "        preferredFont: 'STIX'," +
+        "        styles: { '.MathJax_Display, .MathJax .mo, .MathJax .mi, .MathJax .mn': {color: 'inherit ! important'} }," +
+        "        linebreaks: { automatic: "+ linebreak +", width: '90% container' }," +
+        "    }, " +
+        "}); " +
+        "if ('default' !== 'default') {" +
+            "MathJax.Hub.Register.StartupHook('HTML-CSS Jax Ready',function () {" +
+                "var VARIANT = MathJax.OutputJax['HTML-CSS'].FONTDATA.VARIANT;" +
+                "VARIANT['normal'].fonts.unshift('MathJax_default');" +
+                "VARIANT['bold'].fonts.unshift('MathJax_default-bold');" +
+                "VARIANT['italic'].fonts.unshift('MathJax_default-italic');" +
+                "VARIANT['-tex-mathit'].fonts.unshift('MathJax_default-italic');" +
+            "});" +
+            "MathJax.Hub.Register.StartupHook('SVG Jax Ready',function () {" +
+                "var VARIANT = MathJax.OutputJax.SVG.FONTDATA.VARIANT;" +
+                "VARIANT['normal'].fonts.unshift('MathJax_default');" +
+                "VARIANT['bold'].fonts.unshift('MathJax_default-bold');" +
+                "VARIANT['italic'].fonts.unshift('MathJax_default-italic');" +
+                "VARIANT['-tex-mathit'].fonts.unshift('MathJax_default-italic');" +
+            "});" +
+        "}";
+
+    (document.body || document.getElementsByTagName('head')[0]).appendChild(configscript);
+    (document.body || document.getElementsByTagName('head')[0]).appendChild(mathjaxscript);
+}
+</script>
+    </div>
+  </article>
+  <hr>
+  <div id="disqus_thread"></div>
+  <script>
+    var disqus_config = function() {
+      this.page.url = 'https://anhlt.github.io/classic-object-detection-vi.html';
+      this.page.identifier = 'classic-object-detection';
+    };
+    (function() {
+      var d = document;
+      var s = d.createElement('script');
+      s.src = '//deepmlml.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+  <noscript class="text-muted">
+    Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a>
+  </noscript>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="container">
+<div class="row">
+  <ul class="col-sm-6 list-inline">
+      <li class="list-inline-item"><a href="https://anhlt.github.io/authors.html">Authors</a></li>
+    <li class="list-inline-item"><a href="https://anhlt.github.io/archives.html">Archives</a></li>
+    <li class="list-inline-item"><a href="https://anhlt.github.io/categories.html">Categories</a></li>
+      <li class="list-inline-item"><a href="https://anhlt.github.io/tags.html">Tags</a></li>
+  </ul>
+  <p class="col-sm-6 text-sm-right text-muted">
+    Generated by <a href="https://github.com/getpelican/pelican" target="_blank">Pelican</a>
+    / <a href="https://github.com/nairobilug/pelican-alchemy" target="_blank">&#x2728;</a>
+  </p>
+</div>    </div>
+  </footer>
+
+</body>
+
+</html>

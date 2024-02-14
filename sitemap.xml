@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+      <loc>https://anhlt.github.io/mysql-data-flow-vi.html</loc>
+      <priority>0.8</priority>
+    </url>
+    <url>
+      <loc>https://anhlt.github.io/short-abnomaly-in-db-vi.html</loc>
+      <priority>0.8</priority>
+    </url>
+    <url>
+      <loc>https://anhlt.github.io/short-isolation-in-database-vi.html</loc>
+      <priority>0.8</priority>
+    </url>
+    <url>
+      <loc>https://anhlt.github.io/nodejs-eventloop-hoat-dong-nhu-the-nao-libuv-epoll-vi.html</loc>
+      <priority>0.8</priority>
+    </url>
+    <url>
+      <loc>https://anhlt.github.io/End-t-End-transformer-classic-object-detection-vi.html</loc>
+      <priority>0.8</priority>
+    </url>
+    <url>
+      <loc>https://anhlt.github.io/classic-object-detection-vi.html</loc>
+      <priority>0.8</priority>
+    </url>
+    <url>
+      <loc>https://anhlt.github.io/rpn-explained-vi.html</loc>
+      <priority>0.8</priority>
+    </url>
+</urlset>

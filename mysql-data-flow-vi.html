@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <!-- Required meta tags -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+  <title>  Flow of data in MySQL | Random Thoughts
+</title>
+  <link rel="canonical" href="https://anhlt.github.io/mysql-data-flow-vi.html">
+
+
+  <link rel="stylesheet" href="https://anhlt.github.io/theme/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://anhlt.github.io/theme/css/fontawesome.min.css">
+  <link rel="stylesheet" href="https://anhlt.github.io/theme/css/pygments/default.min.css">
+  <link rel="stylesheet" href="https://anhlt.github.io/theme/css/theme.css">
+
+  <link rel="alternate" type="application/atom+xml" title="Full Atom Feed"
+        href="https://anhlt.github.io/feeds/all.atom.xml">
+  <link rel="alternate" type="application/atom+xml" title="Categories Atom Feed"
+        href="https://anhlt.github.io/feeds/til.atom.xml">  
+  <meta name="description" content="I will try to explain how MySQL write data to Disk, recovery, WAL log, MVCC">
+  <script>
+    (function(i, s, o, g, r, a, m) {
+      i['GoogleAnalyticsObject'] = r;
+      i[r] = i[r] || function() {
+        (i[r].q = i[r].q || []).push(arguments)
+      }, i[r].l = 1 * new Date();
+      a = s.createElement(o);
+      a.async = 1;
+      a.src = g;
+      m = s.getElementsByTagName(o)[0];
+      m.parentNode.insertBefore(a, m)
+    })(window, document, 'script', 'https://www.google-analytics.com/analytics.js', 'ga');
+    ga('create', 'UA-12027115-4', 'auto');
+    ga('send', 'pageview');
+  </script>
+
+
+</head>
+
+<body>
+  <header class="header">
+    <div class="container">
+<div class="row">
+  <div class="col-sm-12">
+    <h1 class="title"><a href="https://anhlt.github.io/">Random Thoughts</a></h1>
+      <p class="text-muted">✨ Suy nghĩ vu vơ</p>
+  </div>
+</div>    </div>
+  </header>
+
+  <div class="main">
+    <div class="container">
+      <h1>  Flow of data in MySQL
+</h1>
+      <hr>
+  <article class="article">
+    <header>
+      <ul class="list-inline">
+        <li class="list-inline-item text-muted" title="2023-02-27T12:17:14+09:00">
+          <i class="fas fa-clock"></i>
+          Mon 27 February 2023
+        </li>
+        <li class="list-inline-item">
+          <i class="fas fa-folder-open"></i>
+          <a href="https://anhlt.github.io/category/til.html">TIL</a>
+        </li>
+          <li class="list-inline-item">
+            <i class="fas fa-user"></i>
+              <a href="https://anhlt.github.io/author/h4cker.html">h4cker</a>          </li>
+          <li class="list-inline-item">
+            <i class="fas fa-tag"></i>
+              <a href="https://anhlt.github.io/tag/transaction_level.html">#Transaction_Level</a>,               <a href="https://anhlt.github.io/tag/database.html">#Database</a>          </li>
+      </ul>
+    </header>
+    <div class="content">
+      <h1 id="flow-of-data-in-mysql">Flow of data in MySQL</h1>
+<p>I will try to explain how MySQL write data to Disk, recovery, WAL log, 
+MVCC.</p>
+<h1 id="ram-and-disk-pages">RAM and Disk, Pages</h1>
+<p><em>How is data stored physically?</em> TLDR: DBMS stored data in RAM and Disk</p>
+<p>Many database are built using 2 types of memory to physically store data.</p>
+<ul>
+<li>RAM: Random access memory or main memory. RAM allows us to access and modify data randomly and fast, the downside of ram is this is volatile, the data in ram will be erased when the computer restart, and the size of RAM is relatively smaller than Disk. </li>
+<li>Disk: persistent storage. Disk allows us to store huge amount of data, and non-volatile. Sequence read/write speed in Disk is faster than random access on Disk.</li>
+</ul>
+<p><em>How is data stored logically?</em> TLDR:  Table are stored in Files of Pages of Record.</p>
+<p>Most databases split files into same-sized pages, that range from 4KB to 16KB. Each page will be identified by <em>PageID</em>. In one page, there are many records, and each record will have the <em>location</em> in the page. To access a particular record on Disk, we need to know the <em>pointer</em> as a pair of <em>(PageID, location)</em>.</p>
+<p><img src="/images/13/Page_buffer_disk.png" width="600" title="'Page_buffer_disk'" alt="'Page_buffer_disk'"></p>
+<h1 id="buffer-management">Buffer management</h1>
+<p>Because we cannot modify data directly on disk, we need to load data from Disk to RAM, modify, then write back to disk to persist data. The perpose of buffer management is providing the illusion that we are operating in memory. Buffer manage map the pages in memory to pages in disk.</p>
+<p>The size of RAM is much smaller than Disk, so we need the strategy for loading pages into RAM, and flushing pages in to Disk. There are 2 properties that we need to think about in buffer management.</p>
+<p><strong><em>Steal</em></strong> Suppose an transaction <em>Trx1</em> want to read data from page <em>P1</em>, but the memory is already full as other transactions load other pages to memory, So <em>Trx1</em> needs to clear some memory, by flush other pages from memory to disk, remove that pages from memory, then load the needed pages from disk to memory. </p>
+<p><strong><em>Force</em></strong> means when the trx1 commit, all the affected pages in memory need to be flushed to disk. </p>
+<p>Let's think about  <strong>No Steal Policy</strong> , We don't allow the pages with uncommited changes to be replaced. This is useful for archieving atomicity without UNDO logging. But also need to keep many pages in memory</p>
+<p><img src="/images/13/Steal.png" width="600" title="'Steal'" alt="'Steal'"></p>
+<p>If we make sure every update are forced onto disk before commit, we are provided durability, but it also cause poor performance by lot of random IO to commit</p>
+<p><strong>Our prefer strategy is  Steal / No-Force</strong></p>
+<p><em>No Force</em> : We don't need to flush modified pages to disk before commit. We will use 2 other data structs to store the changes. <em>Redo log buffer</em> in ram and <em>Redo Log</em> in Disk. Before we update any record in pages on buffer pool, we appending a new log entry of <em>Redo log buffer</em> , and before we commit we will persist the log entries in <em>Redo log buffer</em> to <em>Redo log</em>. Instead of randomy flush the pages to disk, we now write the Redo log sequentially to disk.</p>
+<p><em>Steal</em> : By allowing to replace dirty pages, there is some risk. If the transaction is abort, how can we restore to previous value? What if the system crash before the transaction finished? We need undo log</p>
+<h1 id="redo-log-wal-log">REDO log (WAL log)</h1>
+<p>Basic idea, for every operation on buffer pages, we will record that operation to WAL log.
+Log record, there is 4 kind of log record in Redo log</p>
+<ul>
+<li><em>[START T]</em> transaction T has begun</li>
+<li><em>[COMMIT T]</em> transaction T has commited</li>
+<li><em>[ABORT T]</em> transaction T </li>
+<li><em>[T, X, V]</em> transaction T has updated the element X with new value v</li>
+</ul>
+<div class="highlight"><pre><span></span><code><span class="kr">BEGIN</span>
+
+<span class="n">SELECT</span> <span class="n">value</span> <span class="n">FROM</span> <span class="n">table</span> <span class="n">where</span> <span class="n">ID</span>  <span class="o">=</span> <span class="n">A</span>
+
+<span class="n">UPDATE</span> <span class="n">table</span> <span class="kt">SET</span> <span class="n">value</span> <span class="o">=</span> <span class="mi">16</span> <span class="n">where</span> <span class="n">ID</span> <span class="o">=</span> <span class="n">A</span>
+
+<span class="n">SELECT</span> <span class="n">value</span> <span class="n">FROM</span> <span class="n">table</span> <span class="n">where</span> <span class="n">ID</span>  <span class="o">=</span> <span class="n">B</span>
+
+
+<span class="n">UPDATE</span> <span class="n">table</span> <span class="kt">SET</span> <span class="n">value</span> <span class="o">=</span> <span class="mi">16</span> <span class="n">where</span> <span class="n">ID</span> <span class="o">=</span> <span class="n">B</span>
+
+<span class="n">COMMIT</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code><span class="n">STEP</span><span class="w">    </span><span class="o">|</span><span class="mi">1</span><span class="w">          </span><span class="o">|</span><span class="mi">2</span><span class="w">          </span><span class="o">|</span><span class="mi">3</span><span class="w">      </span><span class="o">|</span><span class="mi">4</span><span class="w">          </span><span class="o">|</span><span class="mi">5</span><span class="w">          </span><span class="o">|</span><span class="mi">6</span><span class="w">      </span><span class="o">|</span><span class="mi">7</span><span class="w">             </span><span class="o">|</span><span class="w"> </span><span class="mi">8</span><span class="w">          </span><span class="o">|</span><span class="w"> </span><span class="mi">9</span><span class="w">      </span><span class="o">|</span><span class="w"> </span><span class="mi">10</span><span class="w">     </span><span class="o">|</span>
+<span class="n">ACTION</span><span class="w">  </span><span class="o">|</span><span class="w">           </span><span class="o">|</span><span class="n">READ</span><span class="p">(</span><span class="n">A</span><span class="p">,</span><span class="n">t</span><span class="p">)</span><span class="w">  </span><span class="o">|</span><span class="n">T</span><span class="o">=</span><span class="n">T</span><span class="o">*</span><span class="mi">2</span><span class="w">  </span><span class="o">|</span><span class="n">WRITE</span><span class="p">(</span><span class="n">A</span><span class="p">,</span><span class="n">t</span><span class="p">)</span><span class="w"> </span><span class="o">|</span><span class="n">READ</span><span class="p">(</span><span class="n">B</span><span class="p">,</span><span class="w"> </span><span class="n">t</span><span class="p">)</span><span class="w"> </span><span class="o">|</span><span class="n">T</span><span class="o">=</span><span class="n">T</span><span class="o">*</span><span class="mi">2</span><span class="w">  </span><span class="o">|</span><span class="w"> </span><span class="n">WRITE</span><span class="w"> </span><span class="p">(</span><span class="n">B</span><span class="p">,</span><span class="w"> </span><span class="n">t</span><span class="p">)</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="n">COMMIT</span><span class="w"> </span><span class="n">T</span><span class="w">   </span><span class="o">|</span><span class="w"> </span><span class="n">FLUSH</span><span class="w"> </span><span class="n">A</span><span class="o">|</span><span class="w"> </span><span class="n">FLUSH</span><span class="w"> </span><span class="n">B</span><span class="o">|</span>
+<span class="n">MEM__A</span><span class="w">  </span><span class="o">|</span><span class="w">           </span><span class="o">|</span><span class="mi">8</span><span class="w">          </span><span class="o">|</span><span class="w">       </span><span class="o">|</span><span class="mi">16</span><span class="w">         </span><span class="o">|</span><span class="mi">16</span><span class="w">         </span><span class="o">|</span><span class="mi">16</span><span class="w">     </span><span class="o">|</span><span class="mi">16</span><span class="w">            </span><span class="o">|</span><span class="w"> </span><span class="mi">16</span><span class="w">         </span><span class="o">|</span><span class="w"> </span><span class="mi">16</span><span class="w">     </span><span class="o">|</span><span class="w"> </span><span class="mi">16</span><span class="w">     </span><span class="o">|</span>
+<span class="n">MEM__B</span><span class="w">  </span><span class="o">|</span><span class="w">           </span><span class="o">|</span><span class="w">           </span><span class="o">|</span><span class="w">       </span><span class="o">|</span><span class="w">           </span><span class="o">|</span><span class="mi">8</span><span class="w">          </span><span class="o">|</span><span class="mi">8</span><span class="w">      </span><span class="o">|</span><span class="mi">16</span><span class="w">            </span><span class="o">|</span><span class="w"> </span><span class="mi">16</span><span class="w">         </span><span class="o">|</span><span class="w"> </span><span class="mi">16</span><span class="w">     </span><span class="o">|</span><span class="w"> </span><span class="mi">16</span><span class="w">     </span><span class="o">|</span>
+<span class="n">DISK_A</span><span class="w">  </span><span class="o">|</span><span class="mi">8</span><span class="w">          </span><span class="o">|</span><span class="mi">8</span><span class="w">          </span><span class="o">|</span><span class="w">       </span><span class="o">|</span><span class="mi">8</span><span class="w">          </span><span class="o">|</span><span class="mi">8</span><span class="w">          </span><span class="o">|</span><span class="mi">8</span><span class="w">      </span><span class="o">|</span><span class="mi">8</span><span class="w">             </span><span class="o">|</span><span class="w"> </span><span class="mi">8</span><span class="w">          </span><span class="o">|</span><span class="w"> </span><span class="mi">16</span><span class="w">     </span><span class="o">|</span><span class="w"> </span><span class="mi">16</span><span class="w">     </span><span class="o">|</span>
+<span class="n">DISK_B</span><span class="w">  </span><span class="o">|</span><span class="mi">8</span><span class="w">          </span><span class="o">|</span><span class="mi">8</span><span class="w">          </span><span class="o">|</span><span class="w">       </span><span class="o">|</span><span class="mi">8</span><span class="w">          </span><span class="o">|</span><span class="mi">8</span><span class="w">          </span><span class="o">|</span><span class="mi">8</span><span class="w">      </span><span class="o">|</span><span class="mi">8</span><span class="w">             </span><span class="o">|</span><span class="w"> </span><span class="mi">8</span><span class="w">          </span><span class="o">|</span><span class="w"> </span><span class="mi">8</span><span class="w">      </span><span class="o">|</span><span class="w"> </span><span class="mi">16</span><span class="w">     </span><span class="o">|</span>
+<span class="n">REDO_L</span><span class="w">  </span><span class="o">|</span><span class="p">[</span><span class="n">START</span><span class="w"> </span><span class="n">T</span><span class="p">]</span><span class="w">  </span><span class="o">|</span><span class="w">           </span><span class="o">|</span><span class="w">       </span><span class="o">|</span><span class="p">[</span><span class="n">T</span><span class="p">,</span><span class="w"> </span><span class="n">A</span><span class="p">,</span><span class="w"> </span><span class="mi">16</span><span class="p">]</span><span class="w"> </span><span class="o">|</span><span class="w">           </span><span class="o">|</span><span class="w">       </span><span class="o">|</span><span class="p">[</span><span class="n">T</span><span class="p">,</span><span class="w"> </span><span class="n">A</span><span class="p">,</span><span class="w"> </span><span class="mi">16</span><span class="p">]</span><span class="w">    </span><span class="o">|</span><span class="w"> </span><span class="p">[</span><span class="n">COMMIT</span><span class="w"> </span><span class="n">T</span><span class="p">]</span><span class="w"> </span><span class="o">|</span><span class="w">        </span><span class="o">|</span><span class="w">        </span><span class="o">|</span>
+</code></pre></div>
+
+<p>Two important points of WAL log.</p>
+<ol>
+<li>
+<p>The operations should be write to WAL log buffer before write to pages</p>
+<p>In the 4th step, we need to write the redo log <strong>[T, A, 16]</strong> before update the value of A in memory</p>
+<p>In the 7th step, we need to write the redo log <strong>[T, B, 16]</strong> before update the value of B in memory</p>
+</li>
+<li>
+<p>Must <strong>force</strong> all log record for a transaction before commit</p>
+<p>In the 8th step, we need to flush all the previous log entries and the <strong>[COMMIT T]</strong> to WAL log in Disk before return success response.</p>
+</li>
+</ol>
+<p>If the system crashed after we wrote the [COMMIT T] to disk. In the WAL log on disk we have</p>
+<div class="highlight"><pre><span></span><code><span class="p">[</span><span class="n">START</span><span class="w"> </span><span class="n">T</span><span class="p">],</span><span class="w"> </span><span class="p">[</span><span class="n">T</span><span class="p">,</span><span class="w"> </span><span class="n">A</span><span class="p">,</span><span class="w"> </span><span class="mi">16</span><span class="p">]</span><span class="w"> </span><span class="p">,[</span><span class="n">T</span><span class="p">,</span><span class="w"> </span><span class="n">A</span><span class="p">,</span><span class="w"> </span><span class="mi">16</span><span class="p">]</span><span class="w"> </span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="n">COMMIT</span><span class="w"> </span><span class="n">T</span><span class="p">]</span>
+</code></pre></div>
+
+<p>So we can redo the the log.</p>
+<p>If the system crashed before we wrote the [COMMIT T] to disk. We should ignore the transaction T. </p>
+<div class="highlight"><pre><span></span><code><span class="p">[</span><span class="n">START</span><span class="w"> </span><span class="n">T</span><span class="p">],</span><span class="w"> </span><span class="p">[</span><span class="n">T</span><span class="p">,</span><span class="w"> </span><span class="n">A</span><span class="p">,</span><span class="w"> </span><span class="mi">16</span><span class="p">]</span><span class="w"> </span><span class="p">,[</span><span class="n">T</span><span class="p">,</span><span class="w"> </span><span class="n">A</span><span class="p">,</span><span class="w"> </span><span class="mi">16</span><span class="p">]</span>
+</code></pre></div>
+
+<h1 id="the-flow-of-data">The flow of data</h1>
+<p>A log sequence number (LSN) represents the offset, in bytes, of a log record from the beginning of a database log file</p>
+<p>FlushedLSN represent the last LSN that have been flushed to Disk</p>
+<p>PageLSN represent the LSN of last log entry, which updated this page</p>
+<p><img src="/images/13/data_flow.png" width="600" title="'data_flow'" alt="'data_flow'"></p>
+<p>As we see in the step 4. If the pageLSN in buffer-pool is larger than flushedLSN, we not allow to force the page to disk, because we will lose information in LSN in case of system crash. 
+If the pageLSN smaller than flushedLSN, we are allow to replace the pages with other pages.</p>
+<h1 id="recovery">Recovery.</h1>
+<p><img src="/images/13/Recovery.png" width="600" title="'Recovery'" alt="'Recovery'"></p>
+<h1 id="undo-log">UNDO Log</h1>
+<p>As you can see that when we update the the value of any record, we update directly to the pages on buffer pool. How can we revert the value when abort the transaction? To do that, we need to save the old value in some place called UNDO log. By using undo log, we can also provide MVCC for transaction.</p>
+<h2 id="mysql-data-layout">Mysql data layout</h2>
+<p><img src="/images/13/B_tree.png" width="600" title="'B_tree'" alt="'B_tree'"></p>
+<p>In InnoDB the clustered index is actually the table. The leaf node in the clustered index contains </p>
+<ul>
+<li>the PK value</li>
+<li>the transaction ID</li>
+<li>the rollback pointer for transactional and MVCC</li>
+<li>the rest of the columns.</li>
+</ul>
+<h2 id="undo-log-entry">UNDO Log Entry.</h2>
+<p>There are 2 types of entry in UNDO Log.</p>
+<p><strong>Insert entry</strong>, for new record, we don't have previous value, but we still need to insert the Inserting entry to UNDO log before update the record value in buffer pool. Insert entry contains</p>
+<p><strong>Update entry</strong>, before we update any record in buffer page, we need to add new update entry with current value of the record to the UNDO log , and then update the value on buffer pool.</p>
+<ul>
+<li>the PK value</li>
+<li>the transaction ID</li>
+<li>the rollback pointer, which points to previous version of the record</li>
+<li>the rest of the columns.</li>
+</ul>
+<p>We could think the UNDO log for every record is a <strong>linked-list</strong> with head is latest value, and the tail is the <strong>Insert Entry</strong></p>
+<h2 id="undo-log-entry_1">Undo Log Entry</h2>
+<ul>
+<li>Every transaction will have one undo log entry. The Undo log header contains the transaction ID that start this UNDO log, The update </li>
+</ul>
+<p><img src="/images/13/UNDO.png" width="600" title="'UNDO'" alt="'UNDO'"></p>
+<h1 id="overall-architecture-of-mysql">Overall architecture of MySQL</h1>
+<p><img src="/images/13/innodb.png" width="600" title="'innodb'" alt="'innodb'"></p>
+<p>https://excalidraw.com/#json=gk8L0m-mg9viqWyc_0MTl,F44tZbzcuRKQaTzrP4avJg</p>
+    </div>
+  </article>
+  <hr>
+  <div id="disqus_thread"></div>
+  <script>
+    var disqus_config = function() {
+      this.page.url = 'https://anhlt.github.io/mysql-data-flow-vi.html';
+      this.page.identifier = 'mysql-data-flow';
+    };
+    (function() {
+      var d = document;
+      var s = d.createElement('script');
+      s.src = '//deepmlml.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+  <noscript class="text-muted">
+    Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a>
+  </noscript>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="container">
+<div class="row">
+  <ul class="col-sm-6 list-inline">
+      <li class="list-inline-item"><a href="https://anhlt.github.io/authors.html">Authors</a></li>
+    <li class="list-inline-item"><a href="https://anhlt.github.io/archives.html">Archives</a></li>
+    <li class="list-inline-item"><a href="https://anhlt.github.io/categories.html">Categories</a></li>
+      <li class="list-inline-item"><a href="https://anhlt.github.io/tags.html">Tags</a></li>
+  </ul>
+  <p class="col-sm-6 text-sm-right text-muted">
+    Generated by <a href="https://github.com/getpelican/pelican" target="_blank">Pelican</a>
+    / <a href="https://github.com/nairobilug/pelican-alchemy" target="_blank">&#x2728;</a>
+  </p>
+</div>    </div>
+  </footer>
+
+</body>
+
+</html>

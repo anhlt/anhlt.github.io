@@ -1,0 +1,986 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Random Thoughts</title><link href="https://anhlt.github.io/" rel="alternate"></link><link href="https://anhlt.github.io/feeds/all.atom.xml" rel="self"></link><id>https://anhlt.github.io/</id><updated>2023-02-27T12:17:14+09:00</updated><subtitle>✨ Suy nghĩ vu vơ</subtitle><entry><title>Flow of data in MySQL</title><link href="https://anhlt.github.io/mysql-data-flow-vi.html" rel="alternate"></link><published>2023-02-27T12:17:14+09:00</published><updated>2023-02-27T12:17:14+09:00</updated><author><name>h4cker</name></author><id>tag:anhlt.github.io,2023-02-27:/mysql-data-flow-vi.html</id><summary type="html">&lt;p&gt;I will try to explain how MySQL write data to Disk, recovery, WAL log, MVCC&lt;/p&gt;</summary><content type="html">&lt;h1 id="flow-of-data-in-mysql"&gt;Flow of data in MySQL&lt;/h1&gt;
+&lt;p&gt;I will try to explain how MySQL write data to Disk, recovery, WAL log, 
+MVCC.&lt;/p&gt;
+&lt;h1 id="ram-and-disk-pages"&gt;RAM and Disk, Pages&lt;/h1&gt;
+&lt;p&gt;&lt;em&gt;How is data stored physically?&lt;/em&gt; TLDR: DBMS stored data in RAM and Disk&lt;/p&gt;
+&lt;p&gt;Many database are built using 2 types of memory to physically store data.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;RAM: Random access memory or main memory. RAM allows us to access and modify data randomly and fast, the downside of ram is this is volatile, the data in ram will be erased when the computer restart, and the size of RAM is relatively smaller than Disk. &lt;/li&gt;
+&lt;li&gt;Disk: persistent storage. Disk allows us to store huge amount of data, and non-volatile. Sequence read/write speed in Disk is faster than random access on Disk.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;em&gt;How is data stored logically?&lt;/em&gt; TLDR:  Table are stored in Files of Pages of Record.&lt;/p&gt;
+&lt;p&gt;Most databases split files into same-sized pages, that range from 4KB to 16KB. Each page will be identified by &lt;em&gt;PageID&lt;/em&gt;. In one page, there are many records, and each record will have the &lt;em&gt;location&lt;/em&gt; in the page. To access a particular record on Disk, we need to know the &lt;em&gt;pointer&lt;/em&gt; as a pair of &lt;em&gt;(PageID, location)&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;img src="/images/13/Page_buffer_disk.png" width="600" title="'Page_buffer_disk'" alt="'Page_buffer_disk'"&gt;&lt;/p&gt;
+&lt;h1 id="buffer-management"&gt;Buffer management&lt;/h1&gt;
+&lt;p&gt;Because we cannot modify data directly on disk, we need to load data from Disk to RAM, modify, then write back to disk to persist data. The perpose of buffer management is providing the illusion that we are operating in memory. Buffer manage map the pages in memory to pages in disk.&lt;/p&gt;
+&lt;p&gt;The size of RAM is much smaller than Disk, so we need the strategy for loading pages into RAM, and flushing pages in to Disk. There are 2 properties that we need to think about in buffer management.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;&lt;em&gt;Steal&lt;/em&gt;&lt;/strong&gt; Suppose an transaction &lt;em&gt;Trx1&lt;/em&gt; want to read data from page &lt;em&gt;P1&lt;/em&gt;, but the memory is already full as other transactions load other pages to memory, So &lt;em&gt;Trx1&lt;/em&gt; needs to clear some memory, by flush other pages from memory to disk, remove that pages from memory, then load the needed pages from disk to memory. &lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;&lt;em&gt;Force&lt;/em&gt;&lt;/strong&gt; means when the trx1 commit, all the affected pages in memory need to be flushed to disk. &lt;/p&gt;
+&lt;p&gt;Let's think about  &lt;strong&gt;No Steal Policy&lt;/strong&gt; , We don't allow the pages with uncommited changes to be replaced. This is useful for archieving atomicity without UNDO logging. But also need to keep many pages in memory&lt;/p&gt;
+&lt;p&gt;&lt;img src="/images/13/Steal.png" width="600" title="'Steal'" alt="'Steal'"&gt;&lt;/p&gt;
+&lt;p&gt;If we make sure every update are forced onto disk before commit, we are provided durability, but it also cause poor performance by lot of random IO to commit&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Our prefer strategy is  Steal / No-Force&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;No Force&lt;/em&gt; : We don't need to flush modified pages to disk before commit. We will use 2 other data structs to store the changes. &lt;em&gt;Redo log buffer&lt;/em&gt; in ram and &lt;em&gt;Redo Log&lt;/em&gt; in Disk. Before we update any record in pages on buffer pool, we appending a new log entry of &lt;em&gt;Redo log buffer&lt;/em&gt; , and before we commit we will persist the log entries in &lt;em&gt;Redo log buffer&lt;/em&gt; to &lt;em&gt;Redo log&lt;/em&gt;. Instead of randomy flush the pages to disk, we now write the Redo log sequentially to disk.&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;Steal&lt;/em&gt; : By allowing to replace dirty pages, there is some risk. If the transaction is abort, how can we restore to previous value? What if the system crash before the transaction finished? We need undo log&lt;/p&gt;
+&lt;h1 id="redo-log-wal-log"&gt;REDO log (WAL log)&lt;/h1&gt;
+&lt;p&gt;Basic idea, for every operation on buffer pages, we will record that operation to WAL log.
+Log record, there is 4 kind of log record in Redo log&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;em&gt;[START T]&lt;/em&gt; transaction T has begun&lt;/li&gt;
+&lt;li&gt;&lt;em&gt;[COMMIT T]&lt;/em&gt; transaction T has commited&lt;/li&gt;
+&lt;li&gt;&lt;em&gt;[ABORT T]&lt;/em&gt; transaction T &lt;/li&gt;
+&lt;li&gt;&lt;em&gt;[T, X, V]&lt;/em&gt; transaction T has updated the element X with new value v&lt;/li&gt;
+&lt;/ul&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kr"&gt;BEGIN&lt;/span&gt;
+
+&lt;span class="n"&gt;SELECT&lt;/span&gt; &lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="n"&gt;FROM&lt;/span&gt; &lt;span class="n"&gt;table&lt;/span&gt; &lt;span class="n"&gt;where&lt;/span&gt; &lt;span class="n"&gt;ID&lt;/span&gt;  &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;A&lt;/span&gt;
+
+&lt;span class="n"&gt;UPDATE&lt;/span&gt; &lt;span class="n"&gt;table&lt;/span&gt; &lt;span class="kt"&gt;SET&lt;/span&gt; &lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;16&lt;/span&gt; &lt;span class="n"&gt;where&lt;/span&gt; &lt;span class="n"&gt;ID&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;A&lt;/span&gt;
+
+&lt;span class="n"&gt;SELECT&lt;/span&gt; &lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="n"&gt;FROM&lt;/span&gt; &lt;span class="n"&gt;table&lt;/span&gt; &lt;span class="n"&gt;where&lt;/span&gt; &lt;span class="n"&gt;ID&lt;/span&gt;  &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;B&lt;/span&gt;
+
+
+&lt;span class="n"&gt;UPDATE&lt;/span&gt; &lt;span class="n"&gt;table&lt;/span&gt; &lt;span class="kt"&gt;SET&lt;/span&gt; &lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;16&lt;/span&gt; &lt;span class="n"&gt;where&lt;/span&gt; &lt;span class="n"&gt;ID&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;B&lt;/span&gt;
+
+&lt;span class="n"&gt;COMMIT&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;STEP&lt;/span&gt;&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;3&lt;/span&gt;&lt;span class="w"&gt;      &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;4&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;6&lt;/span&gt;&lt;span class="w"&gt;      &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;7&lt;/span&gt;&lt;span class="w"&gt;             &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;9&lt;/span&gt;&lt;span class="w"&gt;      &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="w"&gt;     &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+&lt;span class="n"&gt;ACTION&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;           &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;READ&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;A&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="n"&gt;t&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;WRITE&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;A&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="n"&gt;t&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;READ&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;B&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;t&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;WRITE&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;B&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;t&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;COMMIT&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="w"&gt;   &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;FLUSH&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;A&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;FLUSH&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;B&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+&lt;span class="n"&gt;MEM__A&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;           &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;       &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;         &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;         &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;     &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;         &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;     &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;     &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+&lt;span class="n"&gt;MEM__B&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;           &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;           &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;       &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;           &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;      &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;         &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;     &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;     &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+&lt;span class="n"&gt;DISK_A&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;       &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;      &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;             &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;     &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;     &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+&lt;span class="n"&gt;DISK_B&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;       &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;      &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;             &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;      &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;     &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+&lt;span class="n"&gt;REDO_L&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;START&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;           &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;       &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;A&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;           &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;       &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;A&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;COMMIT&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;Two important points of WAL log.&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;
+&lt;p&gt;The operations should be write to WAL log buffer before write to pages&lt;/p&gt;
+&lt;p&gt;In the 4th step, we need to write the redo log &lt;strong&gt;[T, A, 16]&lt;/strong&gt; before update the value of A in memory&lt;/p&gt;
+&lt;p&gt;In the 7th step, we need to write the redo log &lt;strong&gt;[T, B, 16]&lt;/strong&gt; before update the value of B in memory&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Must &lt;strong&gt;force&lt;/strong&gt; all log record for a transaction before commit&lt;/p&gt;
+&lt;p&gt;In the 8th step, we need to flush all the previous log entries and the &lt;strong&gt;[COMMIT T]&lt;/strong&gt; to WAL log in Disk before return success response.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;If the system crashed after we wrote the [COMMIT T] to disk. In the WAL log on disk we have&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;START&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;A&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;,[&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;A&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;COMMIT&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;So we can redo the the log.&lt;/p&gt;
+&lt;p&gt;If the system crashed before we wrote the [COMMIT T] to disk. We should ignore the transaction T. &lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;START&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;A&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;,[&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;A&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;h1 id="the-flow-of-data"&gt;The flow of data&lt;/h1&gt;
+&lt;p&gt;A log sequence number (LSN) represents the offset, in bytes, of a log record from the beginning of a database log file&lt;/p&gt;
+&lt;p&gt;FlushedLSN represent the last LSN that have been flushed to Disk&lt;/p&gt;
+&lt;p&gt;PageLSN represent the LSN of last log entry, which updated this page&lt;/p&gt;
+&lt;p&gt;&lt;img src="/images/13/data_flow.png" width="600" title="'data_flow'" alt="'data_flow'"&gt;&lt;/p&gt;
+&lt;p&gt;As we see in the step 4. If the pageLSN in buffer-pool is larger than flushedLSN, we not allow to force the page to disk, because we will lose information in LSN in case of system crash. 
+If the pageLSN smaller than flushedLSN, we are allow to replace the pages with other pages.&lt;/p&gt;
+&lt;h1 id="recovery"&gt;Recovery.&lt;/h1&gt;
+&lt;p&gt;&lt;img src="/images/13/Recovery.png" width="600" title="'Recovery'" alt="'Recovery'"&gt;&lt;/p&gt;
+&lt;h1 id="undo-log"&gt;UNDO Log&lt;/h1&gt;
+&lt;p&gt;As you can see that when we update the the value of any record, we update directly to the pages on buffer pool. How can we revert the value when abort the transaction? To do that, we need to save the old value in some place called UNDO log. By using undo log, we can also provide MVCC for transaction.&lt;/p&gt;
+&lt;h2 id="mysql-data-layout"&gt;Mysql data layout&lt;/h2&gt;
+&lt;p&gt;&lt;img src="/images/13/B_tree.png" width="600" title="'B_tree'" alt="'B_tree'"&gt;&lt;/p&gt;
+&lt;p&gt;In InnoDB the clustered index is actually the table. The leaf node in the clustered index contains &lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;the PK value&lt;/li&gt;
+&lt;li&gt;the transaction ID&lt;/li&gt;
+&lt;li&gt;the rollback pointer for transactional and MVCC&lt;/li&gt;
+&lt;li&gt;the rest of the columns.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="undo-log-entry"&gt;UNDO Log Entry.&lt;/h2&gt;
+&lt;p&gt;There are 2 types of entry in UNDO Log.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Insert entry&lt;/strong&gt;, for new record, we don't have previous value, but we still need to insert the Inserting entry to UNDO log before update the record value in buffer pool. Insert entry contains&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Update entry&lt;/strong&gt;, before we update any record in buffer page, we need to add new update entry with current value of the record to the UNDO log , and then update the value on buffer pool.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;the PK value&lt;/li&gt;
+&lt;li&gt;the transaction ID&lt;/li&gt;
+&lt;li&gt;the rollback pointer, which points to previous version of the record&lt;/li&gt;
+&lt;li&gt;the rest of the columns.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;We could think the UNDO log for every record is a &lt;strong&gt;linked-list&lt;/strong&gt; with head is latest value, and the tail is the &lt;strong&gt;Insert Entry&lt;/strong&gt;&lt;/p&gt;
+&lt;h2 id="undo-log-entry_1"&gt;Undo Log Entry&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;Every transaction will have one undo log entry. The Undo log header contains the transaction ID that start this UNDO log, The update &lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;img src="/images/13/UNDO.png" width="600" title="'UNDO'" alt="'UNDO'"&gt;&lt;/p&gt;
+&lt;h1 id="overall-architecture-of-mysql"&gt;Overall architecture of MySQL&lt;/h1&gt;
+&lt;p&gt;&lt;img src="/images/13/innodb.png" width="600" title="'innodb'" alt="'innodb'"&gt;&lt;/p&gt;
+&lt;p&gt;https://excalidraw.com/#json=gk8L0m-mg9viqWyc_0MTl,F44tZbzcuRKQaTzrP4avJg&lt;/p&gt;</content><category term="TIL"></category><category term="Transaction_Level"></category><category term="Database"></category></entry><entry><title>[Short] Abnomaly in DB</title><link href="https://anhlt.github.io/short-abnomaly-in-db-vi.html" rel="alternate"></link><published>2022-05-21T12:17:14+09:00</published><updated>2022-05-21T12:17:14+09:00</updated><author><name>h4cker</name></author><id>tag:anhlt.github.io,2022-05-21:/short-abnomaly-in-db-vi.html</id><summary type="html">&lt;p&gt;Giải thích về Isolation Level&lt;/p&gt;</summary><content type="html">&lt;p&gt;Khi sủ dụng một hệ quản trị cơ sở dữ liệu, thì một điều cần đáng phải quan tâm đó chính là xử lý song song các transaction. Khi bạn chỉ có một &lt;/p&gt;
+&lt;div class="toc"&gt;&lt;span class="toctitle"&gt;Table of contents:&lt;/span&gt;&lt;ul&gt;
+&lt;li&gt;&lt;a href="#abnomalies"&gt;Abnomalies&lt;/a&gt;&lt;ul&gt;
+&lt;li&gt;&lt;a href="#dirty-read"&gt;Dirty Read&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#unrepeatable-reads-anomaly"&gt;Unrepeatable Reads Anomaly&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#phantom-reads-anomaly"&gt;Phantom Reads Anomaly&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;a href="#isolation-level"&gt;Isolation Level&lt;/a&gt;&lt;ul&gt;
+&lt;li&gt;&lt;a href="#read-uncommitted"&gt;Read Uncommitted&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#read-committed"&gt;Read Committed&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#cursor-stability"&gt;Cursor Stability&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#repeatable-reads"&gt;Repeatable Reads&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#snapshot-isolation"&gt;Snapshot Isolation&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#serializable"&gt;Serializable&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/div&gt;
+&lt;h1 id="abnomalies"&gt;Abnomalies&lt;/h1&gt;
+&lt;h2 id="dirty-read"&gt;Dirty Read&lt;/h2&gt;
+&lt;p&gt;This is situation when a transaction could read uncommited changes from other transactions.&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;┌──────────────────────┬──────────────────────┐
+│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt;                      &lt;/span&gt;│
+│&lt;span class="w"&gt;         &lt;/span&gt;T1&lt;span class="w"&gt;           &lt;/span&gt;│&lt;span class="w"&gt;         &lt;/span&gt;T2&lt;span class="w"&gt;           &lt;/span&gt;│
+├──────────────────────┼──────────────────────┤
+│&lt;span class="w"&gt;       &lt;/span&gt;BEGIN&lt;span class="w"&gt;          &lt;/span&gt;│&lt;span class="w"&gt;                      &lt;/span&gt;│
+│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt;                      &lt;/span&gt;│
+├──────────────────────┼──────────────────────┤
+│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt;       &lt;/span&gt;BEGIN&lt;span class="w"&gt;          &lt;/span&gt;│
+│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt;                      &lt;/span&gt;│
+├──────────────────────┼──────────────────────┤
+│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt;                      &lt;/span&gt;│
+│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt;       &lt;/span&gt;W&lt;span class="o"&gt;(&lt;/span&gt;A&lt;span class="o"&gt;)&lt;/span&gt;&lt;span class="w"&gt;           &lt;/span&gt;│&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;A&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="m"&gt;20&lt;/span&gt;
+├──────────────────────┼──────────────────────┤
+│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt;                      &lt;/span&gt;│
+│&lt;span class="w"&gt;       &lt;/span&gt;R&lt;span class="o"&gt;(&lt;/span&gt;A&lt;span class="o"&gt;)&lt;/span&gt;&lt;span class="w"&gt;           &lt;/span&gt;│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;A&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="m"&gt;20&lt;/span&gt;
+├──────────────────────┼──────────────────────┤
+│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt;                      &lt;/span&gt;│
+│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt;       &lt;/span&gt;ABORT&lt;span class="w"&gt;          &lt;/span&gt;│
+├──────────────────────┼──────────────────────┤
+│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt;                      &lt;/span&gt;│
+│&lt;span class="w"&gt;       &lt;/span&gt;COMMIT&lt;span class="w"&gt;         &lt;/span&gt;│&lt;span class="w"&gt;                      &lt;/span&gt;│
+└──────────────────────┴──────────────────────┘
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;h2 id="unrepeatable-reads-anomaly"&gt;Unrepeatable Reads Anomaly&lt;/h2&gt;
+&lt;h2 id="phantom-reads-anomaly"&gt;Phantom Reads Anomaly&lt;/h2&gt;
+&lt;h1 id="isolation-level"&gt;Isolation Level&lt;/h1&gt;
+&lt;h2 id="read-uncommitted"&gt;Read Uncommitted&lt;/h2&gt;
+&lt;h2 id="read-committed"&gt;Read Committed&lt;/h2&gt;
+&lt;h2 id="cursor-stability"&gt;Cursor Stability&lt;/h2&gt;
+&lt;h2 id="repeatable-reads"&gt;Repeatable Reads&lt;/h2&gt;
+&lt;h2 id="snapshot-isolation"&gt;Snapshot Isolation&lt;/h2&gt;
+&lt;h2 id="serializable"&gt;Serializable&lt;/h2&gt;</content><category term="TIL"></category><category term="Transaction_Level"></category><category term="Database"></category></entry><entry><title>[Short] Isolation in Database</title><link href="https://anhlt.github.io/short-isolation-in-database-vi.html" rel="alternate"></link><published>2022-05-20T12:17:14+09:00</published><updated>2022-05-20T12:17:14+09:00</updated><author><name>h4cker</name></author><id>tag:anhlt.github.io,2022-05-20:/short-isolation-in-database-vi.html</id><summary type="html">&lt;p&gt;Introduce to Isolation Level&lt;/p&gt;</summary><content type="html">&lt;p&gt;Tính tách biệt (Isolation) của transaction là tính chất mà mỗi transaction hoạt động hoàn toàn độc lập với nhau, không bị ảnh huởng bởi nhung transaction khác.
+Để cải thiện tốc độ xử lý, khi xử lý nhiều transaction, hệ quản trị cơ sở dữ liệu cần phải lập lịch để thực thi câu lệnh giữa các transaction một cách xen kẽ với nhau.&lt;/p&gt;
+&lt;div class="toc"&gt;&lt;span class="toctitle"&gt;Table of contents:&lt;/span&gt;&lt;ul&gt;
+&lt;li&gt;&lt;a href="#mot-so-khai-niem"&gt;Một số khái niệm&lt;/a&gt;&lt;ul&gt;
+&lt;li&gt;&lt;a href="#serial-schedule-lich-thuc-thi-tuan-tu"&gt;Serial Schedule (Lịch thực thi tuần tự)&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#_1"&gt;&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/div&gt;
+&lt;h1 id="mot-so-khai-niem"&gt;Một số khái niệm&lt;/h1&gt;
+&lt;h2 id="serial-schedule-lich-thuc-thi-tuan-tu"&gt;Serial Schedule (Lịch thực thi tuần tự)&lt;/h2&gt;
+&lt;p&gt;Một lịch thực thi tuần tự là lịch thực thi mà các câu lệnh không chạy xen kẽ với nhau.&lt;/p&gt;
+&lt;p&gt;Ví dụ:
+Chúng ta có 2 transaction như sau, cơ sở dữ liệu cần phải lập lịch để thực thi những câu lệnh trong mỗi transaction&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;T1&lt;/span&gt;
+&lt;span class="kr"&gt;BEGIN&lt;/span&gt;
+&lt;span class="n"&gt;A&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;A&lt;/span&gt; &lt;span class="o"&gt;-&lt;/span&gt; &lt;span class="mi"&gt;100&lt;/span&gt;
+&lt;span class="n"&gt;B&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;B&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="mi"&gt;100&lt;/span&gt;
+&lt;span class="n"&gt;COMMIT&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;T2&lt;/span&gt;
+&lt;span class="kr"&gt;BEGIN&lt;/span&gt;
+&lt;span class="n"&gt;A&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;A&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="mf"&gt;0.01&lt;/span&gt;
+&lt;span class="n"&gt;B&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;B&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="mf"&gt;0.01&lt;/span&gt;
+&lt;span class="n"&gt;COMMIT&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;Một lịch thực thi tuần tự sẽ sắp xếp cho T1 hoàn thành trước, sau đó thực thi T2, hoặc ngược lại.&lt;/p&gt;
+&lt;p&gt;Ví dụ&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;T1&lt;/span&gt;          &lt;span class="n"&gt;T2&lt;/span&gt;
+&lt;span class="kr"&gt;BEGIN&lt;/span&gt;
+&lt;span class="n"&gt;A&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;A&lt;/span&gt; &lt;span class="o"&gt;-&lt;/span&gt; &lt;span class="mi"&gt;100&lt;/span&gt;
+&lt;span class="n"&gt;B&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;B&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="mi"&gt;100&lt;/span&gt;
+&lt;span class="n"&gt;COMMIT&lt;/span&gt;
+            &lt;span class="kr"&gt;BEGIN&lt;/span&gt;
+            &lt;span class="n"&gt;A&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;A&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="mf"&gt;0.01&lt;/span&gt;
+            &lt;span class="n"&gt;B&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;B&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="mf"&gt;0.01&lt;/span&gt;
+            &lt;span class="n"&gt;COMMIT&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;h2 id="_1"&gt;&lt;/h2&gt;</content><category term="TIL"></category><category term="Transaction_Level"></category><category term="Database"></category></entry><entry><title>Nodejs eventloop hoạt động như thế nào, Libuv, epoll</title><link href="https://anhlt.github.io/nodejs-eventloop-hoat-dong-nhu-the-nao-libuv-epoll-vi.html" rel="alternate"></link><published>2020-12-28T12:17:14+09:00</published><updated>2020-12-28T12:17:14+09:00</updated><author><name>h4cker</name></author><id>tag:anhlt.github.io,2020-12-28:/nodejs-eventloop-hoat-dong-nhu-the-nao-libuv-epoll-vi.html</id><summary type="html">&lt;p&gt;Libuv , epoll hoạt động như thế nào&lt;/p&gt;</summary><content type="html">&lt;p&gt;Một ngày cuối năm đẹp trời, tôi bị đứa bạn thân ai nấy lo lâu năm hỏi một câu, mày biết tại sao cái thằng Nodejs, Redis là Single-Thread nhưng mà sao nó vẫn chạy nhanh như thế không. Thú thật là mình không biết, vào đọc mấy cái medium thì cũng k hiểu gì. Thôi thì tự code một cái event-loop , cũng là để hiểu event-loop nó hoạt động như thế nào.&lt;/p&gt;
+&lt;div class="toc"&gt;&lt;span class="toctitle"&gt;Table of contents:&lt;/span&gt;&lt;ul&gt;
+&lt;li&gt;&lt;a href="#mot-so-khai-niem"&gt;Một số khái niệm&lt;/a&gt;&lt;ul&gt;
+&lt;li&gt;&lt;a href="#file-descriptors-file-descriptor-table"&gt;File Descriptors / File Descriptor Table&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#timer-callback"&gt;Timer / Callback&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#libuv-eventloop"&gt;Libuv / Eventloop&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;a href="#blocking-socket-server"&gt;Blocking Socket Server&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#non-blocking-socket-server"&gt;Non-Blocking Socket Server&lt;/a&gt;&lt;ul&gt;
+&lt;li&gt;&lt;a href="#co-ket-noi-moi-tu-client"&gt;Có kết nối mới từ client&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#co-du-lieu-tu-ket-noi"&gt;Có dữ liệu từ kết nối:&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#co-tin-hieu-hoi-ap-cho-client"&gt;Có tín hiệu hồi đáp cho client.&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;a href="#libuv"&gt;LibUV&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/div&gt;
+&lt;h2 id="mot-so-khai-niem"&gt;Một số khái niệm&lt;/h2&gt;
+&lt;p&gt;Nào cùng nhau tra cứu một số khái niệm, để hiểu được bài viết này, cảnh báo là nhiều chữ và nhiều code nên các bạn cứ thảnh thơi ra làm ấm trà, điếu thuốc rồi vào đọc cho nó thư thả.&lt;/p&gt;
+&lt;h3 id="file-descriptors-file-descriptor-table"&gt;File Descriptors / File Descriptor Table&lt;/h3&gt;
+&lt;p&gt;Trong linux có một câu nói khá nổi tiếng &lt;code&gt;Everything is a file&lt;/code&gt;, File ở đây có thể là.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;File &lt;em&gt;(Đương nhiên rồi)&lt;/em&gt;&lt;/li&gt;
+&lt;li&gt;Terminal I/O (stdin/stdout/stderr)&lt;/li&gt;
+&lt;li&gt;pipe&lt;/li&gt;
+&lt;li&gt;sockets&lt;/li&gt;
+&lt;li&gt;device&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Khi một tiến trình được khởi chạy thì mặc định sẽ được truy cập đến 3 tài nguyên&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;stdin&lt;/li&gt;
+&lt;li&gt;stdout&lt;/li&gt;
+&lt;li&gt;stderr&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Các tài nguyên này được lưu trong bảng gọi là &lt;strong&gt;File Descriptor Table&lt;/strong&gt; (&lt;code&gt;FDTable&lt;/code&gt;) với chỉ số (index) là File Descriptor(&lt;code&gt;FD&lt;/code&gt;)&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;FD&lt;/th&gt;
+&lt;th&gt;Pointer&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;1&lt;/td&gt;
+&lt;td&gt;stdin pointer&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;2&lt;/td&gt;
+&lt;td&gt;stdout pointer&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;3&lt;/td&gt;
+&lt;td&gt;stderr pointer&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;Nếu tiến trình này mở một file mới, thì file mới sẽ được add vào &lt;code&gt;FDTable&lt;/code&gt;, Tương tự khi tiến trình này mở 1 connection, một pipe, tất cả các tài nguyên này, đều là file, và được lưu ở &lt;code&gt;FDTable&lt;/code&gt;&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;FD&lt;/th&gt;
+&lt;th&gt;Pointer&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;1&lt;/td&gt;
+&lt;td&gt;stdin pointer&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;2&lt;/td&gt;
+&lt;td&gt;stdout pointer&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;3&lt;/td&gt;
+&lt;td&gt;stderr pointer&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;4&lt;/td&gt;
+&lt;td&gt;file pointer&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h3 id="timer-callback"&gt;Timer / Callback&lt;/h3&gt;
+&lt;p&gt;Cùng nói qua một chút về &lt;code&gt;timer&lt;/code&gt; và &lt;code&gt;callback&lt;/code&gt; trong &lt;code&gt;javascipt&lt;/code&gt;. Chúng ta cùng xem xét đoạn code sau&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;setTimeout(function cb() {
+    console.log(&amp;quot;callback&amp;quot;)
+}, 5000)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;thì nodejs sẽ khởi tạo 1 &lt;code&gt;timer&lt;/code&gt;, sau khi &lt;code&gt;timer&lt;/code&gt;đó kết thúc, thì sẽ đẩy &lt;code&gt;callback&lt;/code&gt; vào &lt;code&gt;task queue&lt;/code&gt;&lt;/p&gt;
+&lt;p&gt;&lt;span class="videobox"&gt;
+            &lt;video width="800" height="300" preload="none" controls poster="None"&gt;&lt;source src='images/09/timer3.mp4' type='video/mp4; codecs="avc1.42E01E, mp4a.40.2"'&gt;&lt;/video&gt;&lt;/span&gt;&lt;/p&gt;
+&lt;h3 id="libuv-eventloop"&gt;Libuv / Eventloop&lt;/h3&gt;
+&lt;p&gt;Nhắc đến &lt;strong&gt;Event Loop&lt;/strong&gt; trong javascript thì chắc chẳng ai còn lạ gì nữa, nếu thấy lạ thì mời bạn xem video rất nổi tiếng sau đây:&lt;/p&gt;
+&lt;p&gt;&lt;span class="videobox"&gt;
+                    &lt;iframe width="640" height="390"
+                        src='https://www.youtube.com/embed/8aGhZQkoFbQ'
+                        frameborder='0' webkitAllowFullScreen
+                        mozallowfullscreen allowFullScreen&gt;
+                    &lt;/iframe&gt;
+                &lt;/span&gt;&lt;/p&gt;
+&lt;p&gt;Libuv là gì, nó là thư viện để xử lý các vấn đề liên quan đến bất đồng bộ. Libuv là nền tảng của event-loop trong Nodejs. Video ở trên đã giải thích được nodejs tương tác với stack , task queue, event loop như thế nào. Bài viết này sẽ giải thích cách mà event loop hoạt đột. &lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nx"&gt;libuv&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;is&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;a&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;multi&lt;/span&gt;&lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="nx"&gt;platform&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;support&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kn"&gt;library&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;with&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;a&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;focus&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;on&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;asynchronous&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;I&lt;/span&gt;&lt;span class="o"&gt;/&lt;/span&gt;&lt;span class="nx"&gt;O&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nx"&gt;It&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;was&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;primarily&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;developed&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;by&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;Node&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;js&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;but&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;it&lt;/span&gt;&lt;span class="err"&gt;&amp;#39;&lt;/span&gt;&lt;span class="nx"&gt;s&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;also&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;used&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;by&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;Luvit&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;Julia&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;pyuv&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;and&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;others&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;img src="images/09/nodejs_system.png" width="500" title="'Node JS System'" alt="'Node JS System'"&gt;&lt;/p&gt;
+&lt;p&gt;Để dễ hiểu hơn về cơ chế hoạt động của event-loop. hãy bắt đầu thử viết một event loop đơn giản, xử lý kết nối qua socket. Tôi sẽ đưa ra 2 ví dụ về 2 cách viết.&lt;/p&gt;
+&lt;h2 id="blocking-socket-server"&gt;Blocking Socket Server&lt;/h2&gt;
+&lt;figure class='code'&gt;
+&lt;figcaption&gt;&lt;span class="liquid-tags-code-filename"&gt;blocking_socket.py&lt;/span&gt;&lt;a href='/code/09/blocking_socket.py'&gt;download&lt;/a&gt;&lt;/figcaption&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;socket&lt;/span&gt;
+
+&lt;span class="n"&gt;EOL&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="sa"&gt;b&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&lt;/span&gt;&lt;span class="se"&gt;\n&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&lt;/span&gt;
+&lt;span class="n"&gt;response&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="sa"&gt;b&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;Hello world&amp;#39;&lt;/span&gt;
+&lt;span class="n"&gt;HOST&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;127.0.0.1&amp;#39;&lt;/span&gt;  &lt;span class="c1"&gt;# The server&amp;#39;s hostname or IP address&lt;/span&gt;
+&lt;span class="n"&gt;PORT&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;65432&lt;/span&gt;        &lt;span class="c1"&gt;# The port used by the server&lt;/span&gt;
+
+&lt;span class="k"&gt;with&lt;/span&gt; &lt;span class="n"&gt;socket&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;socket&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;socket&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;AF_INET&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;socket&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;SOCK_STREAM&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="k"&gt;as&lt;/span&gt; &lt;span class="n"&gt;server&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;server&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;bind&lt;/span&gt;&lt;span class="p"&gt;((&lt;/span&gt;&lt;span class="n"&gt;HOST&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;PORT&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+    &lt;span class="n"&gt;server&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;listen&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+
+    &lt;span class="k"&gt;while&lt;/span&gt; &lt;span class="kc"&gt;True&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="n"&gt;conn&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;address&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;server&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;accept&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+        &lt;span class="k"&gt;with&lt;/span&gt; &lt;span class="n"&gt;conn&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="n"&gt;req&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="sa"&gt;b&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&amp;#39;&lt;/span&gt;
+            &lt;span class="k"&gt;while&lt;/span&gt; &lt;span class="n"&gt;EOL&lt;/span&gt; &lt;span class="ow"&gt;not&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;req&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+                &lt;span class="n"&gt;req&lt;/span&gt; &lt;span class="o"&gt;+=&lt;/span&gt; &lt;span class="n"&gt;conn&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;recv&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1024&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+                &lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;-&amp;#39;&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="mi"&gt;50&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;&lt;/span&gt;&lt;span class="se"&gt;\n&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+                &lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;req&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;decode&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;
+                &lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;-&amp;#39;&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="mi"&gt;50&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;&lt;/span&gt;&lt;span class="se"&gt;\n&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+            &lt;span class="n"&gt;conn&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;send&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;response&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;/figure&gt;
+&lt;p&gt;Nói đến lập trình socketsocket thì ví dụ trên là một chương trình socket điển hình. 
+- Khởi tạo một socket server, lắng nghe ở port &lt;code&gt;654321&lt;/code&gt;. 
+- Tạo một vòng lặp vô tận, chờ một kết nối đến
+    - nhận dữ liệu từ client cho đến khi có kí tự &lt;code&gt;EOL&lt;/code&gt; trong nội dung.
+    - Đóng kết nối và gửi lại client nội dung &lt;code&gt;Hello world&lt;/code&gt;
+    - Tiếp tục một vòng lặp mới&lt;/p&gt;
+&lt;p&gt;Nhưng vấn đề ở chương trình này là gì, đó là nó bị &lt;code&gt;blocking&lt;/code&gt; ở câu lệnh sau &lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;    &lt;span class="n"&gt;conn&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;address&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;server&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;accept&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;Tại dòng lệnh này thì trình dịch python sẽ dừng chương trình lại, không xử lý gì cả, chờ đợt cho đến khi có một connection mới. Thuật ngữ thường được gọi là &lt;code&gt;blocking IO&lt;/code&gt;. Khi có dữ liệu mới từ client, chương trình tiếp tục xử lý và sau đó quay lại chu kì lặp và tiếp tục chờ đợi. Dẫn đến chương trình này chỉ làm việc được với tối đa 1 client trong 1 thời điểm, những client sau đó phải chờ cho đến khi client trước đó hoàn thành phiên làm việc mới được xử lý.&lt;/p&gt;
+&lt;p&gt;Các bạn có thể xem demo chường trình này dưới đây, tôi cùng một lúc khởi tạo 2 client với id là &lt;code&gt;1&lt;/code&gt; và &lt;code&gt;2&lt;/code&gt; đến socket server. Mỗi client hoạt động theo logic như sau:
+- Khởi tạo kết nối đến server
+- Sau một khoảng thời gian nhất định, gửi 1 xâu có giá trị &lt;code&gt;hello from {client_id}&lt;/code&gt; đến server
+- Sau 10 lần gửi thông điệp client sẽ gửi &lt;code&gt;EOL&lt;/code&gt; đến server&lt;/p&gt;
+&lt;p&gt;Các bạn có thể thấy, server xử lý tuần tự 1 client trong 1 thời điểm, sau khi hoàn thành xử lý với &lt;code&gt;client 1&lt;/code&gt;, thì server mới tiếp tục làm việc với &lt;code&gt;client 2&lt;/code&gt; &lt;/p&gt;
+&lt;p&gt;&lt;a href="https://asciinema.org/a/OMX7Buub9ksUi9k7eLiUSK6g8"&gt;&lt;img alt="asciicast" src="https://asciinema.org/a/OMX7Buub9ksUi9k7eLiUSK6g8.svg"&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;figure class='code'&gt;
+&lt;figcaption&gt;&lt;span class="liquid-tags-code-title"&gt;client.py&lt;/span&gt;&lt;a href='/code/09/client.py'&gt;download&lt;/a&gt;&lt;/figcaption&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;socket&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;time&lt;/span&gt;
+&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;typing&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;SupportsInt&lt;/span&gt;
+
+
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;argparse&lt;/span&gt;
+&lt;span class="n"&gt;parser&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;argparse&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ArgumentParser&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;description&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;Process some integers.&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;parser&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;add_argument&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;client_id&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nb"&gt;type&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="nb"&gt;int&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;action&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;store&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;parser&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;add_argument&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;inteval&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nb"&gt;type&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="nb"&gt;int&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;action&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;store&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;args&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;parser&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;parse_args&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="n"&gt;inteval&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;inteval&lt;/span&gt;
+&lt;span class="n"&gt;client_id&lt;/span&gt; &lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;int&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;client_id&lt;/span&gt;
+
+
+
+&lt;span class="n"&gt;HOST&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s1"&gt;&amp;#39;127.0.0.1&amp;#39;&lt;/span&gt;  &lt;span class="c1"&gt;# The server&amp;#39;s hostname or IP address&lt;/span&gt;
+&lt;span class="n"&gt;PORT&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;65432&lt;/span&gt;        &lt;span class="c1"&gt;# The port used by the server&lt;/span&gt;
+
+
+&lt;span class="k"&gt;with&lt;/span&gt; &lt;span class="n"&gt;socket&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;socket&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;socket&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;AF_INET&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;socket&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;SOCK_STREAM&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="k"&gt;as&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+
+    &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;connect&lt;/span&gt;&lt;span class="p"&gt;((&lt;/span&gt;&lt;span class="n"&gt;HOST&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;PORT&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+    &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;_&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="nb"&gt;range&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="n"&gt;time&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;sleep&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;inteval&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;b&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;hello from &lt;/span&gt;&lt;span class="si"&gt;%d&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&lt;/span&gt; &lt;span class="o"&gt;%&lt;/span&gt; &lt;span class="n"&gt;client_id&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;sendall&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;b&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;hello from &lt;/span&gt;&lt;span class="si"&gt;%d&lt;/span&gt;&lt;span class="s1"&gt;: &amp;#39;&lt;/span&gt; &lt;span class="o"&gt;%&lt;/span&gt; &lt;span class="n"&gt;client_id&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;sendall&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="sa"&gt;b&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;Hello, world&lt;/span&gt;&lt;span class="se"&gt;\n&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;data&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;recv&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1024&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;Received&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nb"&gt;repr&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;data&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;/figure&gt;
+&lt;p&gt;Để giải quyết bài toán này thì mọi người thường nghĩ đến một giải pháp là &lt;code&gt;multithread&lt;/code&gt;, đây cũng là giải pháp thường được các thầy giáo hướng dẫn ở trong trường đại học. Mỗi khi có một kết nối đến server thì chương trình sẽ khởi tạo 1 thread mới, xử lý data được gửi đến từ client và trả lại dữ liệu cho client.&lt;/p&gt;
+&lt;p&gt;Nhược điểm của phương pháp này nó là, mỗi thread sẽ có &lt;code&gt;call stack&lt;/code&gt; riêng, và việc chuyển đổi giữa các &lt;code&gt;call stack&lt;/code&gt; cũng ảnh hưởng tới hiệu năng của chương trình. Một cách khác để giải quyết vấn đề này đó chính là &lt;code&gt;non-blocking IO&lt;/code&gt;, nói một cách khác, chúng ta sẽ không bắt chương trình chờ cho đến khi có data nữa.&lt;/p&gt;
+&lt;h2 id="non-blocking-socket-server"&gt;Non-Blocking Socket Server&lt;/h2&gt;
+&lt;p&gt;&lt;img src="images/09/epoll.png" width="500" title="'Epoll'" alt="'Epoll'"&gt;&lt;/p&gt;
+&lt;p&gt;Để giải quyết bài toán trên mà không sử dụng đến &lt;code&gt;multithread&lt;/code&gt;, chúng ta cần sử dụng một &lt;code&gt;system call&lt;/code&gt; là &lt;code&gt;epoll&lt;/code&gt;. &lt;code&gt;epoll&lt;/code&gt; là 1 câu lệnh của hệ điều hành linux (&lt;code&gt;system call&lt;/code&gt;), đưa cho &lt;code&gt;epoll&lt;/code&gt; một hoặc nhiều &lt;code&gt;file descriptors&lt;/code&gt;, &lt;code&gt;epoll&lt;/code&gt; sẽ trả về cho chương trình những file nào có thể đọc được.&lt;/p&gt;
+&lt;p&gt;Quay lại về bài toán lập trình socket. Để sử dụng &lt;code&gt;epoll&lt;/code&gt; thì chúng ta sẽ thay đổi logic như sau:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Khởi tạo một &lt;code&gt;socket&lt;/code&gt;, và &lt;code&gt;epoll&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;Đăng kí &lt;code&gt;socket file descriptor&lt;/code&gt; cùng sự kiện &lt;code&gt;EPOLLIN&lt;/code&gt; vào trong &lt;code&gt;epoll&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;Tại một vòng lặp vô tận:&lt;ul&gt;
+&lt;li&gt;kiểm tra xem epoll có event mới nào không&lt;/li&gt;
+&lt;li&gt;nếu có sự kiện mới thì xử lý sự kiện đó, và tiếp tục lặp&lt;/li&gt;
+&lt;li&gt;nếu không thì tiếp tục quay lại vòng lặp&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;img src="images/09/epoll_flow.png" width="500" title="'Epoll Flow'" alt="'Epoll Flow'"&gt;&lt;/p&gt;
+&lt;figure class='code'&gt;
+&lt;figcaption&gt;&lt;span class="liquid-tags-code-title"&gt;lang:python&lt;/span&gt;&lt;span class="liquid-tags-code-filename"&gt;non_blocking_socket.py&lt;/span&gt;&lt;span class="liquid-tags-code-lines"&gt;[Lines 67-94]&lt;/span&gt;&lt;a href='/code/09/non_blocking_socket.py'&gt;download&lt;/a&gt;&lt;/figcaption&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server, epoll_context(server.fileno(), select.EPOLLIN) as epoll:
+    server.bind((HOST, PORT))
+    server.setblocking(False)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    server.listen(5)
+
+    print(&amp;quot;Listening&amp;quot;)
+    connections : Dict[int, socket.socket] = {}
+
+
+    requests : Dict[int, bytes]= {}
+    responses: Dict[int, bytes] = {}
+    server_fd = server.fileno()
+
+    while True:
+        events = epoll.poll(0)
+        print(&amp;quot;waiting..&amp;quot;)
+        for fileno, event in events:
+            if fileno == server_fd:
+                init_connection(server, connections, requests, responses, epoll)
+            elif event &amp;amp; select.EPOLLIN:
+                receive_request(fileno, connections, requests, responses, epoll)
+            elif event &amp;amp; select.EPOLLOUT:
+                send_response(fileno, connections, responses, epoll)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;/figure&gt;
+&lt;p&gt;Đối với mỗi loại event thì server sẽ xử lý bằng những hàm tương ứng, chúng ta cùng xem kỹ hơn cách server xử lý từng loại sự kiện.&lt;/p&gt;
+&lt;h3 id="co-ket-noi-moi-tu-client"&gt;Có kết nối mới từ client&lt;/h3&gt;
+&lt;p&gt;Khi kiểm tra &lt;code&gt;file descriptor&lt;/code&gt; của sự kiện mới là &lt;code&gt;socket server file descriptor&lt;/code&gt; chúng ta hiểu được rằng là đã có một kết nối đến server.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Bởi vì kết nối cũng là 1 file, nên chúng ta sẽ đăng kí &lt;code&gt;fd&lt;/code&gt; của kết nối này vào trong &lt;code&gt;epoll&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;Mỗi khi có dữ liệu mới đến từ kết nối này, &lt;code&gt;epoll&lt;/code&gt; sẽ tạo event mới cho chúng ta&lt;/li&gt;
+&lt;/ul&gt;
+&lt;figure class='code'&gt;
+&lt;figcaption&gt;&lt;span class="liquid-tags-code-title"&gt;lang:python :hideall:&lt;/span&gt;&lt;span class="liquid-tags-code-filename"&gt;non_blocking_socket.py&lt;/span&gt;&lt;span class="liquid-tags-code-lines"&gt;[Lines 26-38]&lt;/span&gt;&lt;a href='/code/09/non_blocking_socket.py'&gt;download&lt;/a&gt;&lt;/figcaption&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;init_connection&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nl"&gt;server&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;socket&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;socket&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nl"&gt;connections&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Dict&lt;/span&gt;&lt;span class="o"&gt;[&lt;/span&gt;&lt;span class="n"&gt;int, socket.socket&lt;/span&gt;&lt;span class="o"&gt;]&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;requests&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="err"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Dict&lt;/span&gt;&lt;span class="o"&gt;[&lt;/span&gt;&lt;span class="n"&gt;int, bytes&lt;/span&gt;&lt;span class="o"&gt;]&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;responses&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="err"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Dict&lt;/span&gt;&lt;span class="o"&gt;[&lt;/span&gt;&lt;span class="n"&gt;int, bytes&lt;/span&gt;&lt;span class="o"&gt;]&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nl"&gt;epoll&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;select&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;epoll&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="err"&gt;:&lt;/span&gt;
+
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nl"&gt;conn&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;socket&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;socket&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;conn&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;server&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;accept&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;conn&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;setblocking&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="k"&gt;False&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;f&lt;/span&gt;&lt;span class="ss"&gt;&amp;quot;New Connection: {addr}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;fd&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;conn&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;fileno&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;epoll&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;register&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;fd&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;select&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;EPOLLIN&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;connections&lt;/span&gt;&lt;span class="o"&gt;[&lt;/span&gt;&lt;span class="n"&gt;fd&lt;/span&gt;&lt;span class="o"&gt;]&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;conn&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;requests&lt;/span&gt;&lt;span class="o"&gt;[&lt;/span&gt;&lt;span class="n"&gt;fd&lt;/span&gt;&lt;span class="o"&gt;]&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;b&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&amp;#39;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;responses&lt;/span&gt;&lt;span class="o"&gt;[&lt;/span&gt;&lt;span class="n"&gt;fd&lt;/span&gt;&lt;span class="o"&gt;]&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;b&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;&amp;#39;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;/figure&gt;
+&lt;h3 id="co-du-lieu-tu-ket-noi"&gt;Có dữ liệu từ kết nối:&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;Đọc dữ liệu từ kết nối&lt;/li&gt;
+&lt;li&gt;Nếu kết nối bị ngắt, xóa &lt;code&gt;fd&lt;/code&gt; tương ứng khỏi &lt;code&gt;epoll&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;Nếu có &lt;code&gt;EOL&lt;/code&gt; trong dữ liệu thì set event cho &lt;code&gt;fd&lt;/code&gt; trở thành &lt;code&gt;EPOLLOUT&lt;/code&gt;, tương ứng với việc thông báo cho chương trình là đã đọc hết dữ liệu từ client này, hãy hồi đáp về cho client&lt;/li&gt;
+&lt;/ul&gt;
+&lt;figure class='code'&gt;
+&lt;figcaption&gt;&lt;span class="liquid-tags-code-title"&gt;lang:python :hideall:&lt;/span&gt;&lt;span class="liquid-tags-code-filename"&gt;non_blocking_socket.py&lt;/span&gt;&lt;span class="liquid-tags-code-lines"&gt;[Lines 40-58]&lt;/span&gt;&lt;a href='/code/09/non_blocking_socket.py'&gt;download&lt;/a&gt;&lt;/figcaption&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="s s-Atom"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;receive_request&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s s-Atom"&gt;fileno&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s s-Atom"&gt;int&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;  &lt;span class="s s-Atom"&gt;connections&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nv"&gt;Dict&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s s-Atom"&gt;int&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s s-Atom"&gt;socket&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="s s-Atom"&gt;socket&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt; &lt;span class="s s-Atom"&gt;requests&lt;/span&gt; &lt;span class="o"&gt;:&lt;/span&gt; &lt;span class="nv"&gt;Dict&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s s-Atom"&gt;int&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s s-Atom"&gt;bytes&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt; &lt;span class="s s-Atom"&gt;responses&lt;/span&gt; &lt;span class="o"&gt;:&lt;/span&gt; &lt;span class="nv"&gt;Dict&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s s-Atom"&gt;int&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s s-Atom"&gt;bytes&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt; &lt;span class="s s-Atom"&gt;epoll&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s s-Atom"&gt;select&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="s s-Atom"&gt;epoll&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;
+
+    &lt;span class="s s-Atom"&gt;requests&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s s-Atom"&gt;fileno&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="s s-Atom"&gt;+=&lt;/span&gt; &lt;span class="s s-Atom"&gt;connections&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s s-Atom"&gt;fileno&lt;/span&gt;&lt;span class="p"&gt;].&lt;/span&gt;&lt;span class="nf"&gt;recv&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1024&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="nf"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s s-Atom"&gt;f&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;new updated {fileno} {requests[fileno]}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="s s-Atom"&gt;if&lt;/span&gt; &lt;span class="s s-Atom"&gt;requests&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s s-Atom"&gt;fileno&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="nv"&gt;QUIT&lt;/span&gt; &lt;span class="s s-Atom"&gt;or&lt;/span&gt; &lt;span class="s s-Atom"&gt;requests&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s s-Atom"&gt;fileno&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="nv"&gt;EMPTY&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;
+        &lt;span class="nf"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s s-Atom"&gt;&amp;#39;[{:02d}] exit or hung up&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;format&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s s-Atom"&gt;fileno&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+        &lt;span class="s s-Atom"&gt;epoll&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;unregister&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s s-Atom"&gt;fileno&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="s s-Atom"&gt;connections&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s s-Atom"&gt;fileno&lt;/span&gt;&lt;span class="p"&gt;].&lt;/span&gt;&lt;span class="nf"&gt;close&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+        &lt;span class="s s-Atom"&gt;del&lt;/span&gt; &lt;span class="s s-Atom"&gt;connections&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s s-Atom"&gt;fileno&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt; &lt;span class="s s-Atom"&gt;requests&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s s-Atom"&gt;fileno&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt; &lt;span class="s s-Atom"&gt;responses&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s s-Atom"&gt;fileno&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+
+    &lt;span class="s s-Atom"&gt;elif&lt;/span&gt; &lt;span class="nv"&gt;EOL&lt;/span&gt; &lt;span class="s s-Atom"&gt;in&lt;/span&gt; &lt;span class="s s-Atom"&gt;requests&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s s-Atom"&gt;fileno&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;
+        &lt;span class="s s-Atom"&gt;epoll&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;modify&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s s-Atom"&gt;fileno&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s s-Atom"&gt;select&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nv"&gt;EPOLLOUT&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="s s-Atom"&gt;msg&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s s-Atom"&gt;requests&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s s-Atom"&gt;fileno&lt;/span&gt;&lt;span class="p"&gt;][&lt;/span&gt;&lt;span class="o"&gt;:-&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+        &lt;span class="nf"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;[{:02d}] says: {}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;format&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s s-Atom"&gt;fileno&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s s-Atom"&gt;msg&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+        &lt;span class="s s-Atom"&gt;responses&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s s-Atom"&gt;fileno&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s s-Atom"&gt;b&amp;#39;ACK\n&amp;#39;&lt;/span&gt;
+        &lt;span class="s s-Atom"&gt;requests&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s s-Atom"&gt;fileno&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s s-Atom"&gt;b&amp;#39;&amp;#39;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;/figure&gt;
+&lt;h3 id="co-tin-hieu-hoi-ap-cho-client"&gt;Có tín hiệu hồi đáp cho client.&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;Gửi dữ liệu cho client&lt;/li&gt;
+&lt;li&gt;Đổi loại event cho kết nối thành &lt;code&gt;EPOLLIN&lt;/code&gt;, để server tiếp lắng nghe dữ liệu mới trên kết nối này&lt;/li&gt;
+&lt;/ul&gt;
+&lt;figure class='code'&gt;
+&lt;figcaption&gt;&lt;span class="liquid-tags-code-title"&gt;lang:python :hideall:&lt;/span&gt;&lt;span class="liquid-tags-code-filename"&gt;non_blocking_socket.py&lt;/span&gt;&lt;span class="liquid-tags-code-lines"&gt;[Lines 59-64]&lt;/span&gt;&lt;a href='/code/09/non_blocking_socket.py'&gt;download&lt;/a&gt;&lt;/figcaption&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;def&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;send_response&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nl"&gt;fileno&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nc"&gt;int&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nl"&gt;connections&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Dict&lt;/span&gt;&lt;span class="o"&gt;[&lt;/span&gt;&lt;span class="n"&gt;int, socket.socket&lt;/span&gt;&lt;span class="o"&gt;]&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="n"&gt;responses&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="err"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Dict&lt;/span&gt;&lt;span class="o"&gt;[&lt;/span&gt;&lt;span class="n"&gt;int, bytes&lt;/span&gt;&lt;span class="o"&gt;]&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nl"&gt;epoll&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;select&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;epoll&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="err"&gt;:&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="ss"&gt;&amp;quot;&amp;quot;&amp;quot;Send a response to a client.&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;byteswritten&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;connections&lt;/span&gt;&lt;span class="o"&gt;[&lt;/span&gt;&lt;span class="n"&gt;fileno&lt;/span&gt;&lt;span class="o"&gt;]&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;send&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;responses&lt;/span&gt;&lt;span class="o"&gt;[&lt;/span&gt;&lt;span class="n"&gt;fileno&lt;/span&gt;&lt;span class="o"&gt;]&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;responses&lt;/span&gt;&lt;span class="o"&gt;[&lt;/span&gt;&lt;span class="n"&gt;fileno&lt;/span&gt;&lt;span class="o"&gt;]&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;responses&lt;/span&gt;&lt;span class="o"&gt;[&lt;/span&gt;&lt;span class="n"&gt;fileno&lt;/span&gt;&lt;span class="o"&gt;][&lt;/span&gt;&lt;span class="n"&gt;byteswritten:&lt;/span&gt;&lt;span class="o"&gt;]&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;epoll&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="k"&gt;modify&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;fileno&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;select&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;EPOLLIN&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;/figure&gt;
+&lt;p&gt;&lt;a href="https://asciinema.org/a/DQcgHeBbIcy7AXU1lP5VKeMqr"&gt;&lt;img alt="asciicast" src="https://asciinema.org/a/DQcgHeBbIcy7AXU1lP5VKeMqr.svg"&gt;&lt;/a&gt;&lt;/p&gt;
+&lt;h2 id="libuv"&gt;LibUV&lt;/h2&gt;
+&lt;p&gt;&lt;img src="images/09/loop_iteration.png" width="500" title="'Epoll'" alt="'Epoll'"&gt;&lt;/p&gt;
+&lt;p&gt;Nói một cách đơn giản, Libuv chỉ là 1 vòng lặp.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Đầu tiên chương trình sẽ kiểm tra vòng lặp này có đang hoạt động hay không? Chương trình có handler nào hay không, có kết nối nào hay không&lt;/li&gt;
+&lt;li&gt;Thực thi những &lt;code&gt;timer&lt;/code&gt; đã hết thời gian chờ. Khi một timer hết hạn, thì &lt;code&gt;callback&lt;/code&gt; của timer đó sẽ được đẩy vào queue&lt;/li&gt;
+&lt;li&gt;Thực thi các &lt;code&gt;callback&lt;/code&gt; đang được pending trong &lt;code&gt;task queue&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;Tính toán thời gian chờ (timeout) khi polling&lt;/li&gt;
+&lt;li&gt;Chờ IO trong khoảng thời gian &lt;code&gt;timeout&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;Kiểm tra &lt;code&gt;callback handler&lt;/code&gt; đã được thực thi hay chưa.&lt;/li&gt;
+&lt;li&gt;Thực thi &lt;code&gt;close callbacks&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;</content><category term="Programing"></category><category term="eventloop"></category><category term="epoll"></category><category term="socket"></category><category term="javascript"></category><category term="libuv"></category></entry><entry><title>Giải thích bài báo DEtection TRansformer</title><link href="https://anhlt.github.io/End-t-End-transformer-classic-object-detection-vi.html" rel="alternate"></link><published>2020-06-16T19:18:33+09:00</published><updated>2020-06-16T19:18:33+09:00</updated><author><name>h4cker</name></author><id>tag:anhlt.github.io,2020-06-16:/End-t-End-transformer-classic-object-detection-vi.html</id><summary type="html">&lt;p&gt;Giới thiệu bài toán Object Detection cổ điển, từ đó nắm bắt được ý tưởng của các thuật toán Deep Learing phức tạp hơn&lt;/p&gt;</summary><content type="html">&lt;p&gt;Từ trước đến nay bài toán object detection thường dựa vào các thuật toán thiết kế thủ công như Non-maximum Suppession, hay anchor generation để thiết kế mạng network. Bài báo này đưa ra một phương pháp mới mới gọi là "DEtection TRansformer" sử dụng kiến trúc transfomer để giải quyết bài toán object detection.&lt;/p&gt;
+&lt;h3 id="mot-so-khai-niem"&gt;Một số khái niệm&lt;/h3&gt;
+&lt;h4 id="hungarian-algotithm"&gt;Hungarian Algotithm&lt;/h4&gt;
+&lt;h5 id="bai-toan"&gt;Bài toán&lt;/h5&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;Một nhà máy có bốn nhân công thực hiện 4 công việc khác nhau trong
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;div class="math"&gt;$$
+\begin{array}{llll}
+30 &amp;amp; 40 &amp;amp; 50 &amp;amp; 60 \\
+70 &amp;amp; 30 &amp;amp; 40 &amp;amp; 70 \\
+60 &amp;amp; 50 &amp;amp; 60 &amp;amp; 30 \\
+20 &amp;amp; 80 &amp;amp; 50 &amp;amp; 70
+\end{array}
+$$&lt;/div&gt;
+&lt;h3 id="kien-truc-mang-detr"&gt;Kiến trúc mạng DETR&lt;/h3&gt;
+&lt;p&gt;&lt;img src="/images/08/network.png" width="1000" title="'DETR'" alt="'DETR'"&gt;&lt;/p&gt;
+&lt;p&gt;Kiến trúc mạng DETR gồm 3 thành phần chính&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;Backbone network&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;Tương tự như Faster RCNN, DETR sử dụng một mạng CNN để thu được &lt;code&gt;convolutional features&lt;/code&gt; của ảnh đầu vào. &lt;/p&gt;
+&lt;p&gt;Với mỗi ảnh đầu vào có kích thước&lt;/p&gt;
+&lt;p&gt;
+&lt;div class="math"&gt;$$x_{\mathrm{img}} \in \mathbb{R}^{3 \times H_{0} \times W_{0}}$$&lt;/div&gt;
+&lt;/p&gt;
+&lt;p&gt;thu được &lt;code&gt;convolutional features&lt;/code&gt; có kích thước &lt;/p&gt;
+&lt;p&gt;
+&lt;div class="math"&gt;$$f \in \mathbb{R}^{C \times H \times W} $$&lt;/div&gt;
+&lt;/p&gt;
+&lt;p&gt;trong đó &lt;span class="math"&gt;\(C=2048\)&lt;/span&gt; , &lt;span class="math"&gt;\(H, W=\frac{H_{0}}{32}, \frac{W_{0}}{32}\)&lt;/span&gt;&lt;/p&gt;
+&lt;p&gt;&lt;img src="/images/rpn/step-1.png" width="400" title="'Fast RCNN'" alt="'Fast RCNN'"&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;Transformer encoder&lt;/strong&gt;    &lt;/p&gt;
+&lt;p&gt;Ở đây, tác giả sử dụng &lt;span class="math"&gt;\(1x1\)&lt;/span&gt; convolution để giảm chiều &lt;code&gt;convolutional features&lt;/code&gt; từ &lt;span class="math"&gt;\(C\)&lt;/span&gt; xuống &lt;span class="math"&gt;\(z_{0} \in \mathbb{R}^{d \times H \times W}\)&lt;/span&gt;. 
+Bởi vì &lt;code&gt;encoder&lt;/code&gt; có đầu vào dạng &lt;code&gt;sequence&lt;/code&gt;, tại đây, &lt;code&gt;features&lt;/code&gt; được &lt;code&gt;flatten&lt;/code&gt; thành &lt;span class="math"&gt;\(z_{0} \in \mathbb{R}^{d \times HW}\)&lt;/span&gt; &lt;/p&gt;
+&lt;p&gt;&lt;img src="/images/08/step1.png" width="400" title="'Fast RCNN'" alt="'Fast RCNN'"&gt;&lt;/p&gt;
+&lt;p&gt;&lt;img src="/images/08/transformer.png" width="400" title="'Encoder-Decoder' | Hello" alt="'Encoder-Decoder' | Hello"&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h3 id="loss-function"&gt;Loss Function&lt;/h3&gt;
+&lt;p&gt;DETR cho ra output gồm N dự đoán &lt;/p&gt;
+&lt;div class="math"&gt;$$y = N \times \left(c_{i} , b_{i}\right)$$&lt;/div&gt;
+&lt;p&gt;với &lt;span class="math"&gt;\(c_{i}\)&lt;/span&gt; là xác suất  &lt;/p&gt;
+&lt;div class="math"&gt;$$\hat{y} = N  \times \left(c_i , b_i\right)$$&lt;/div&gt;
+&lt;div class="math"&gt;$$
+\hat{\sigma}=\underset{\sigma \in \mathfrak{S}_{N}}{\arg \min } \sum_{i}^{N} \mathcal{L}_{\mathrm{match}}\left(y_{i}, \hat{y}_{\sigma(i)}\right)
+$$&lt;/div&gt;
+&lt;h4 id="hungarian-loss"&gt;Hungarian Loss&lt;/h4&gt;
+&lt;div class="math"&gt;$$
+\mathcal{L}_{\text {Hungarian }}(y, \hat{y})=\sum_{i=1}^{N}\left[-\log \hat{p}_{\hat{\sigma}(i)}\left(c_{i}\right)+\mathbb{1}_{\left\{c_{i} \neq \varnothing\right\}} \mathcal{L}_{\mathrm{box}}\left(b_{i}, \hat{b}_{\hat{\sigma}}(i)\right)\right]
+$$&lt;/div&gt;
+&lt;script type="text/javascript"&gt;if (!document.getElementById('mathjaxscript_pelican_#%@#$@#')) {
+    var align = "center",
+        indent = "0em",
+        linebreak = "false";
+
+    if (false) {
+        align = (screen.width &lt; 768) ? "left" : align;
+        indent = (screen.width &lt; 768) ? "0em" : indent;
+        linebreak = (screen.width &lt; 768) ? 'true' : linebreak;
+    }
+
+    var mathjaxscript = document.createElement('script');
+    mathjaxscript.id = 'mathjaxscript_pelican_#%@#$@#';
+    mathjaxscript.type = 'text/javascript';
+    mathjaxscript.src = 'https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.3/latest.js?config=TeX-AMS-MML_HTMLorMML';
+
+    var configscript = document.createElement('script');
+    configscript.type = 'text/x-mathjax-config';
+    configscript[(window.opera ? "innerHTML" : "text")] =
+        "MathJax.Hub.Config({" +
+        "    config: ['MMLorHTML.js']," +
+        "    TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'none' } }," +
+        "    jax: ['input/TeX','input/MathML','output/HTML-CSS']," +
+        "    extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']," +
+        "    displayAlign: '"+ align +"'," +
+        "    displayIndent: '"+ indent +"'," +
+        "    showMathMenu: true," +
+        "    messageStyle: 'normal'," +
+        "    tex2jax: { " +
+        "        inlineMath: [ ['\\\\(','\\\\)'] ], " +
+        "        displayMath: [ ['$$','$$'] ]," +
+        "        processEscapes: true," +
+        "        preview: 'TeX'," +
+        "    }, " +
+        "    'HTML-CSS': { " +
+        "        availableFonts: ['STIX', 'TeX']," +
+        "        preferredFont: 'STIX'," +
+        "        styles: { '.MathJax_Display, .MathJax .mo, .MathJax .mi, .MathJax .mn': {color: 'inherit ! important'} }," +
+        "        linebreaks: { automatic: "+ linebreak +", width: '90% container' }," +
+        "    }, " +
+        "}); " +
+        "if ('default' !== 'default') {" +
+            "MathJax.Hub.Register.StartupHook('HTML-CSS Jax Ready',function () {" +
+                "var VARIANT = MathJax.OutputJax['HTML-CSS'].FONTDATA.VARIANT;" +
+                "VARIANT['normal'].fonts.unshift('MathJax_default');" +
+                "VARIANT['bold'].fonts.unshift('MathJax_default-bold');" +
+                "VARIANT['italic'].fonts.unshift('MathJax_default-italic');" +
+                "VARIANT['-tex-mathit'].fonts.unshift('MathJax_default-italic');" +
+            "});" +
+            "MathJax.Hub.Register.StartupHook('SVG Jax Ready',function () {" +
+                "var VARIANT = MathJax.OutputJax.SVG.FONTDATA.VARIANT;" +
+                "VARIANT['normal'].fonts.unshift('MathJax_default');" +
+                "VARIANT['bold'].fonts.unshift('MathJax_default-bold');" +
+                "VARIANT['italic'].fonts.unshift('MathJax_default-italic');" +
+                "VARIANT['-tex-mathit'].fonts.unshift('MathJax_default-italic');" +
+            "});" +
+        "}";
+
+    (document.body || document.getElementsByTagName('head')[0]).appendChild(configscript);
+    (document.body || document.getElementsByTagName('head')[0]).appendChild(mathjaxscript);
+}
+&lt;/script&gt;</content><category term="Deep Learning"></category><category term="vietnamese"></category><category term="explained"></category><category term="object_detection"></category><category term="transfomer"></category></entry><entry><title>Bài toán Object Detection cổ điển</title><link href="https://anhlt.github.io/classic-object-detection-vi.html" rel="alternate"></link><published>2018-01-16T19:18:33+09:00</published><updated>2018-01-16T19:18:33+09:00</updated><author><name>h4cker</name></author><id>tag:anhlt.github.io,2018-01-16:/classic-object-detection-vi.html</id><summary type="html">&lt;p&gt;Giới thiệu bài toán Object Detection cổ điển, từ đó nắm bắt được ý tưởng của các thuật toán Deep Learing phức tạp hơn&lt;/p&gt;</summary><content type="html">&lt;p&gt;Nhiều năm về trước, bài toán object detection thường sử dụng những thuật toán đơn giản, tốc độ tính toán nhanh, nhưng bù lại độ chính xác không tốt như sử dụng deep learning. Mặc dù vậy, để hiểu rõ hơn về ý tưởng của các thuật toán phức tạp hơn, hôm nay mình muốn giới thiệu ý tưởng của 1 thuật toán cổ điển, sử dụng HOG. Mục đích của bài viết này chỉ là giới thiệu về ý tưởng của thuật toán , nên mình sẽ không code bài toán này. &lt;/p&gt;
+&lt;h3 id="trich-xuat-thuoc-tinh"&gt;Trích xuất thuộc tính&lt;/h3&gt;
+&lt;p&gt;Trích xuất thuộc tính(feature extraction) là một quá trình nhằm biến dữ liệu phức tạp đầu vào thành một cách biểu diễn dữ liệu đơn giản hơn, phù hợp hơn cho các thuật toán học máy. Dữ liệu sau khi xử lý đã được lược bỏ phần dữ liệu dư thừa, giữ lại những dữ liệu có ích cho bài toán cần xử lý.&lt;/p&gt;
+&lt;p&gt;Trong bài toán object detection, đầu vào của dữ liệu là hình ảnh , vì thế để đơn giản hơn cho việc tính toán chúng ra sử dụng một số thuật toán để trích xuất như HOG, SIFT. Trong nội dung bài viết này, tôi không đi sâu về các thuật toán trích xuất dữ liệu này.&lt;/p&gt;
+&lt;h3 id="histogram-of-oriented-gradients"&gt;Histogram of Oriented Gradients&lt;/h3&gt;
+&lt;p&gt;Histogram of Oriented Gradients(HOG) là một thuật toán để trích xuất thuộc tính hình ảnh. Vậy cụ thể HOG có đầu ra như thế nào. &lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;HOG chia hình ảnh đầu vào thành một lưới các ô vuông&lt;/li&gt;
+&lt;li&gt;Mỗi ô vuông trích xuất thành một vector hướng của gradient trong cell đó&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;img class="right" src="/images/06/hog_01.png" width="200"&gt;&lt;/p&gt;
+&lt;p&gt;Trích dẫn một ví dụ về đầu ra của HOG từ trang &lt;a href="http://scikit-image.org/docs/dev/auto_examples/features_detection/plot_hog.html"&gt;scikit-image.org&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;img class="right" src="/images/06/hog_02.png" width="800" title="hehehe" alt="hehehe"&gt;&lt;/p&gt;
+&lt;p&gt;Từ ví dụ trên ta có thể thấy, trích xuất thuộc tính bằng HOG bảo toàn thông tin về đường viền của đối tượng trong ảnh, làm mất đi các thông tin về màu sắc, giảm độ sắc nét của dữ liệu. &lt;/p&gt;
+&lt;p&gt;Thông thường, đầu vào của một hình ảnh có kích thước &lt;span class="math"&gt;\(W x H x 3\)&lt;/span&gt; , đầu ra của HOG là vector 1-D &lt;span class="math"&gt;\(N x 1\)&lt;/span&gt;&lt;/p&gt;
+&lt;p&gt;Đã có một bài viết tiếng Việt đề cập khá cụ thể về cách tính HOG feature từ &lt;a href="https://viblo.asia/p/tim-hieu-ve-hoghistogram-of-oriented-gradients-m68Z0wL6KkG"&gt;Viblo&lt;/a&gt;. Các bạn có thể tham khảo thêm&lt;/p&gt;
+&lt;h3 id="sliding-window"&gt;Sliding Window&lt;/h3&gt;
+&lt;p&gt;Sau khi đã có HOG feature descriptor, ta sẽ sử dụng vào bài toán object detector. Phần này tôi sẽ lược dịch từ trang &lt;a href="https://www.pyimagesearch.com/2014/11/10/histogram-oriented-gradients-object-detection/"&gt;pyimagesearch.com&lt;/a&gt;&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Lấy ra số lượng P các hỉnh ảnh chưa đối tượng và trích xuât HOG feature descriptor từ các hình ảnh này&lt;/li&gt;
+&lt;li&gt;Lấy ra N các hình ảnh không chưa bất kì một đối tượng nào và trích xuất HOG feature descriptor từ các hình ảnh này. Trong thực tế thì &lt;span class="math"&gt;\(N &amp;gt;&amp;gt; P\)&lt;/span&gt;  &lt;/li&gt;
+&lt;li&gt;Huấn luyện mạng SVM trên các HOG feature descriptor trên tập dữ liệu từ bước một và bước 2&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Đối với mỗi hình ảnh trong tập không chứa đối tượng, sử dụng phương pháp sliding window, tại mỗi vị trí cửa sổ tính toán giá trị HOG và sử dụng mô hình SVM đã huấn luyện ở trên để dự đoán kết quả. Nếu mô hình đưa ra kết quả sai, lưu lại giá trị HOG tương ứng tại vị trí cửa sổ đó cùng xác suất được dự đoán&lt;/p&gt;
+&lt;p&gt;&lt;img class="right" src="/images/06/sliding_window_example.gif" width="200"&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Lấy các kết quả false-positive tìm thấy ở bước 4 , sắp xếp theo giá trị của xác suất và huấn luyện lại mô hình SVM&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;Kết thúc&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h3 id="loi-ket"&gt;Lời kết&lt;/h3&gt;
+&lt;p&gt;Giải quyết bài toán object detection bằng các phương pháp cổ điển có ưu điểm là cần năng lực tính toán thấp, mô hình đơn giản, tốc độ xử lý nhanh. Nhưng trong quá trình xử lý làm mất đi nhiều thông tin giá trị của hình ảnh như màu sắc, độ sắc nét. Dẫn tới độ chính xác không cao.&lt;/p&gt;
+&lt;script type="text/javascript"&gt;if (!document.getElementById('mathjaxscript_pelican_#%@#$@#')) {
+    var align = "center",
+        indent = "0em",
+        linebreak = "false";
+
+    if (false) {
+        align = (screen.width &lt; 768) ? "left" : align;
+        indent = (screen.width &lt; 768) ? "0em" : indent;
+        linebreak = (screen.width &lt; 768) ? 'true' : linebreak;
+    }
+
+    var mathjaxscript = document.createElement('script');
+    mathjaxscript.id = 'mathjaxscript_pelican_#%@#$@#';
+    mathjaxscript.type = 'text/javascript';
+    mathjaxscript.src = 'https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.3/latest.js?config=TeX-AMS-MML_HTMLorMML';
+
+    var configscript = document.createElement('script');
+    configscript.type = 'text/x-mathjax-config';
+    configscript[(window.opera ? "innerHTML" : "text")] =
+        "MathJax.Hub.Config({" +
+        "    config: ['MMLorHTML.js']," +
+        "    TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'none' } }," +
+        "    jax: ['input/TeX','input/MathML','output/HTML-CSS']," +
+        "    extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']," +
+        "    displayAlign: '"+ align +"'," +
+        "    displayIndent: '"+ indent +"'," +
+        "    showMathMenu: true," +
+        "    messageStyle: 'normal'," +
+        "    tex2jax: { " +
+        "        inlineMath: [ ['\\\\(','\\\\)'] ], " +
+        "        displayMath: [ ['$$','$$'] ]," +
+        "        processEscapes: true," +
+        "        preview: 'TeX'," +
+        "    }, " +
+        "    'HTML-CSS': { " +
+        "        availableFonts: ['STIX', 'TeX']," +
+        "        preferredFont: 'STIX'," +
+        "        styles: { '.MathJax_Display, .MathJax .mo, .MathJax .mi, .MathJax .mn': {color: 'inherit ! important'} }," +
+        "        linebreaks: { automatic: "+ linebreak +", width: '90% container' }," +
+        "    }, " +
+        "}); " +
+        "if ('default' !== 'default') {" +
+            "MathJax.Hub.Register.StartupHook('HTML-CSS Jax Ready',function () {" +
+                "var VARIANT = MathJax.OutputJax['HTML-CSS'].FONTDATA.VARIANT;" +
+                "VARIANT['normal'].fonts.unshift('MathJax_default');" +
+                "VARIANT['bold'].fonts.unshift('MathJax_default-bold');" +
+                "VARIANT['italic'].fonts.unshift('MathJax_default-italic');" +
+                "VARIANT['-tex-mathit'].fonts.unshift('MathJax_default-italic');" +
+            "});" +
+            "MathJax.Hub.Register.StartupHook('SVG Jax Ready',function () {" +
+                "var VARIANT = MathJax.OutputJax.SVG.FONTDATA.VARIANT;" +
+                "VARIANT['normal'].fonts.unshift('MathJax_default');" +
+                "VARIANT['bold'].fonts.unshift('MathJax_default-bold');" +
+                "VARIANT['italic'].fonts.unshift('MathJax_default-italic');" +
+                "VARIANT['-tex-mathit'].fonts.unshift('MathJax_default-italic');" +
+            "});" +
+        "}";
+
+    (document.body || document.getElementsByTagName('head')[0]).appendChild(configscript);
+    (document.body || document.getElementsByTagName('head')[0]).appendChild(mathjaxscript);
+}
+&lt;/script&gt;</content><category term="Deep Learning"></category><category term="vietnamese"></category><category term="explained"></category><category term="object_detection"></category></entry><entry><title>Giải thích về mô hình Faster RCNN - Phần 1: RPN</title><link href="https://anhlt.github.io/rpn-explained-vi.html" rel="alternate"></link><published>2017-10-08T03:27:29+09:00</published><updated>2017-10-09T03:27:29+09:00</updated><author><name>h4cker</name></author><id>tag:anhlt.github.io,2017-10-08:/rpn-explained-vi.html</id><summary type="html">&lt;p&gt;Region Proposal Networks (RPNs)&lt;/p&gt;</summary><content type="html">&lt;h3 id="gioi-thieu-ve-faster-rcnn"&gt;Giới thiệu về Faster RCNN&lt;/h3&gt;
+&lt;p&gt;Faster RCNN là một thuật toán để tìm kiếm vị trí của vật thể trong ảnh. Thuật toán này sẽ có đầu ra là những hình hộp, cùng với vật thể bên trong hộp đó là gì. Phiên bản đầu tiên của Faster RCNN là RCNN, với nguyên lý khá đơn giản. &lt;/p&gt;
+&lt;p&gt;&lt;a href="/rpn-explained-code-pytorch.html"&gt;Phần 2: Giải thích RCNN bằng Pytorch&lt;/a&gt;&lt;/p&gt;
+&lt;hr&gt;
+&lt;h4 id="rcnn"&gt;RCNN&lt;/h4&gt;
+&lt;ol&gt;
+&lt;li&gt;Tác giả sử dụng một thuật toán gọi là selective search để đưa ra các bounding boxes, hay còn gọi là region proposals, chứa các vùng có thể có vật thể ở trong. &lt;/li&gt;
+&lt;li&gt;Sử dụng các mạng đã được huấn luyện sẵn như Alex-net, VGG-16 để tính toán feed-forward các regions thu được convolutional features của mỗi region, sau đó huấn luyện SVM để xác định được vật thể nào được chứa trong region proposal đó. &lt;/li&gt;
+&lt;li&gt;Sử dụng Linear Regression để hiệu chỉnh các giá trị ( vị trí các đỉnh) của region proposer &lt;/li&gt;
+&lt;/ol&gt;
+&lt;h4 id="fast-rcnn"&gt;Fast RCNN&lt;/h4&gt;
+&lt;ol&gt;
+&lt;li&gt;Sử dụng các mạng huấn luyện sẵn để feed-forward các region proposals, sẽ tốn nhiều thời gian bởi với mỗi ảnh thuật toán selective search sẽ cho ra hàng nghìn region proposals. &lt;/li&gt;
+&lt;li&gt;Tác giả sẽ chỉ feed-forward một lần đối với ảnh gốc, thu được convolutional features của ảnh đó. Ví dụ với một hình ảnh có kích thước &lt;span class="math"&gt;\(600 * 600 * 3\)&lt;/span&gt;, ta sẽ thu được convolutional features với kích thước &lt;span class="math"&gt;\(37 * 37 * 512\)&lt;/span&gt;. Kích thước của features bị giảm nhỏ khoảng 16 lần &lt;span class="math"&gt;\(\frac{600}{37}\)&lt;/span&gt;.&lt;/li&gt;
+&lt;li&gt;Dựa vào kích thước cùng vị trí của các region proposals đối với ảnh gốc, ta sẽ tính toán được vị trí của region proposal trong convolutional features.&lt;/li&gt;
+&lt;li&gt;Sửa dụng giá trị convolutional faetures của region proposal, ta dự đoán được vị trí các đỉnh của bounding box cũng như vật thể nằm trong bounding box là gì.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;&lt;img src="/images/rpn/fast_rcnn.png" width="600" title="'Fast RCNN'" alt="'Fast RCNN'"&gt;&lt;/p&gt;
+&lt;p&gt;Source: https://www.slideshare.net/simplyinsimple/detection-52781995.&lt;/p&gt;
+&lt;p&gt;Đối với Fast RCNN , do chia sẻ tính toán giữa các region trong ảnh, tốc độ thực thực thi của thuật toán đã được giảm từ 120s mỗi ảnh xuống 2s. Phần tính toán gây ra nghẽn chính là phần đưa ra các region proposal đầu vào, chỉ có thể thực thi tuần tự trên CPU. Faster RCNN giải quyết vấn đề này bằng cách sử dụng DNN để tính toán các region proposals này.&lt;/p&gt;
+&lt;h3 id="rpn"&gt;RPN&lt;/h3&gt;
+&lt;p&gt;RPN giải quyết các vấn đề trên bằng cách huấn luyện mạng neural network để đảm nhận thay vai trò của các thuật toán như selective search vốn rất chậm chạp.&lt;/p&gt;
+&lt;p&gt;Một Region Proposal Network nhận đầu vào là ảnh với kích thước bất kì và cho đầu ra là region proposal (tập vị trí của các hình chữ nhật có thể chứa vật thể), cùng với xác suất chứa vật thể của hình chữ nhật tương ứng.&lt;/p&gt;
+&lt;hr&gt;
+&lt;h4 id="cau-truc"&gt;Cấu trúc&lt;/h4&gt;
+&lt;p&gt;Cách hoạt động RPN có 2 bước chính&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;Feed-forward ảnh qua DNN thu được convolutional features.&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;Trong bài báo gốc, tác giả đã nhắc đến nhiều các mạng Convolution Network có sẵn như VGG-16, ZFNet, để dễ dàng cho việc giải thích, chúng ta sẽ lấy ví dụ ở đây là mạng VGG-16. &lt;/p&gt;
+&lt;p&gt;Mạng VGG-16 chứa 13   convolutions layer kích thước &lt;span class="math"&gt;\(3 \times 3\)&lt;/span&gt; cùng với 5  max pooling layer kích thước &lt;span class="math"&gt;\(2 \times 2\)&lt;/span&gt;. Khi đầu vào là một ảnh có kích thước &lt;span class="math"&gt;\(3 \times W \times H\)&lt;/span&gt; , đầu ra sẽ nhận được &lt;span class="math"&gt;\(3 \times W^{'} \times H^{'}\)&lt;/span&gt; với &lt;span class="math"&gt;\(W^{'} = \frac{W}{16}\)&lt;/span&gt; &lt;span class="math"&gt;\(H^{'} = \frac{H}{16}\)&lt;/span&gt;&lt;/p&gt;
+&lt;p&gt;&lt;img src="/images/rpn/step-1.png" width="600" title="'Fast RCNN'" alt="'Fast RCNN'"&gt;&lt;/p&gt;
+&lt;p&gt;Source: https://www.quora.com/How-does-the-region-proposal-network-RPN-in-Faster-R-CNN-work.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;Sử dụng một cửa sổ trượt lên convolutional features .&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;&lt;img src="/images/rpn/rpn.png" width="600" title="'RPN'" alt="'RPN'"&gt;&lt;/p&gt;
+&lt;p&gt;Để tạo ra region proposals, chúng ta sử dụng một network hay còn gọi là cửa sổ trượt (sliding-window) kích thước &lt;span class="math"&gt;\(n \times n\)&lt;/span&gt; trượt trên convolutional features. Đầu ra của network này là đầu vào của 2 fully-connected layer dự đoán vị trí của regions (box-regression layer), cũng như xác suất chứa object(box-classification) của hộp ấy. Tại mỗi vị trí của cửa sổ trượt chúng ta dự đoán đồng thời nhiều nhiều region proposal cùng một lúc, với &lt;span class="math"&gt;\(k\)&lt;/span&gt; là số proposal tương ứng với mỗi vị trí. Vậy &lt;span class="math"&gt;\(reg\)&lt;/span&gt; layer có &lt;span class="math"&gt;\(4k\)&lt;/span&gt; đầu ra dự đoán vị trí của &lt;span class="math"&gt;\(k\)&lt;/span&gt; proposal,  &lt;span class="math"&gt;\(cls\)&lt;/span&gt; layer chứa &lt;span class="math"&gt;\(2k\)&lt;/span&gt; đầu ra dự đoán xác suất chứa vật thể của proposal.&lt;/p&gt;
+&lt;p&gt;Source: https://www.quora.com/How-does-the-region-proposal-network-RPN-in-Faster-R-CNN-work.&lt;/p&gt;
+&lt;p&gt;Tại sao phải tạo ra những anchors này. Theo cách hiểu của bản thân tôi thì, trong bài toán xác định vị trí vật thể, số lượng đầu ra của mỗi ảnh là khác nhau. Ví dụ một bức ảnh có thể có 2 vật thể, một bức ảnh khác có 4 vật thể. Vì số lượng output là không cố định ta phải dựa vào các anchor để cố định hóa số lượng output này. &lt;/p&gt;
+&lt;p&gt;Đối với mỗi bức ảnh, ta đều sinh ra các anchors tương ứng phụ thuộc vào kích cỡ của ảnh đó, bằng cách tính giá trị overlap của anchors với ground truth boxes, ta có thể xác định được anchors đó là positive hay negative. &lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;RPN (
+(features): Sequential (
+    (0): Conv2d(3, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (1): ReLU (inplace)
+    (2): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (3): ReLU (inplace)
+    (4): MaxPool2d (size=(2, 2), stride=(2, 2), dilation=(1, 1))
+    (5): Conv2d(64, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (6): ReLU (inplace)
+    (7): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (8): ReLU (inplace)
+    (9): MaxPool2d (size=(2, 2), stride=(2, 2), dilation=(1, 1))
+    (10): Conv2d(128, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (11): ReLU (inplace)
+    (12): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (13): ReLU (inplace)
+    (14): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (15): ReLU (inplace)
+    (16): MaxPool2d (size=(2, 2), stride=(2, 2), dilation=(1, 1))
+    (17): Conv2d(256, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (18): ReLU (inplace)
+    (19): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (20): ReLU (inplace)
+    (21): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (22): ReLU (inplace)
+    (23): MaxPool2d (size=(2, 2), stride=(2, 2), dilation=(1, 1))
+    (24): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (25): ReLU (inplace)
+    (26): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (27): ReLU (inplace)
+    (28): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (29): ReLU (inplace)
+    (30): MaxPool2d (size=(2, 2), stride=(2, 2), dilation=(1, 1))
+)
+(conv1): Conv2d (
+    (conv): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (relu): ReLU (inplace)
+)
+(score_conv): Conv2d (
+    (conv): Conv2d(512, 18, kernel_size=(1, 1), stride=(1, 1))
+)
+(bbox_conv): Conv2d (
+    (conv): Conv2d(512, 36, kernel_size=(1, 1), stride=(1, 1)))
+)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h4 id="anchors"&gt;Anchors&lt;/h4&gt;
+&lt;p&gt;&lt;img src="/images/rpn/anchors.png" width="600" title="'RPN'" alt="'RPN'"&gt;&lt;/p&gt;
+&lt;p&gt;Sau khi đã có đầu ra của các region proposal, chúng ta sẽ tìm hiểu về khái niệm anchors. Tại mỗi vị trí của sliding window trên convolutional features, chúng ta tạo ra &lt;span class="math"&gt;\(k\)&lt;/span&gt; anchors tương ứng ở hình ảnh gốc. Trong bài báo, tác giả sử dụng 1 hình vuông, 2 hình chữ nhật với tỉ lệ chiều rộng, chiều dài là 1-2, 2-1, cùng với 3 kích cỡ khác nhau, như vậy &lt;span class="math"&gt;\(k = 3 \times 3 = 9\)&lt;/span&gt;. &lt;/p&gt;
+&lt;p&gt;Các anchors này sẽ được gán mác là positive hoặc negative dựa vào diện tích overlap với ground truth box theo luật như sau.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;Các anchor được phân loại là positive nếu&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Là anchor có  tỉ lệ diện tích chồng chéo trên diện tích chồng chập (Intersection-over-
+Union - viết tắt IoU) overlap lớn nhất với một ground truth box.&lt;/li&gt;
+&lt;li&gt;Là anchor có  tỉ lệ IoU với một ground truth lớn hơn 0.7&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Các anchor được phân noại là negative nếu có giá trị IoU bé hơn 0.3&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;Các anchor không thỏa mãn 2 điều kiện nêu trên thì bỏ qua. Không được đánh giá trong quá trình training object.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;Tại sao phải tạo ra những anchors này&lt;/strong&gt;. Câu trả lời gồm 2 nguyên nhân chính&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Dựa phân loại của anchor, để dự đoán xác suất chứa vật thể của các region proposal&lt;/li&gt;
+&lt;li&gt;Dựa vào khoảng cách từ anchor đến ground truth box, để dự đoán vị trí của bounding box. &lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;Từ đây ta xác định được tiêu đầu ra của &lt;em&gt;box-regression layer&lt;/em&gt; và &lt;em&gt;box-classification&lt;/em&gt; được nhắc tới ở phần cấu trúc mạng RPN. &lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Box-classification dự đoán xác suất chứa vật thể của &lt;span class="math"&gt;\(k\)&lt;/span&gt; region proposal, tương ứng với &lt;span class="math"&gt;\(k\)&lt;/span&gt; anchor tại từng vị trí của sliding-window.&lt;/li&gt;
+&lt;li&gt;Box-regression dự đoán khoảng cách tư anchor đến ground truth box tương ứng.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id="loss-function"&gt;Loss function&lt;/h3&gt;
+&lt;p&gt;Loss function sẽ được định nghĩa theo công thức sau &lt;/p&gt;
+&lt;div class="math"&gt;$$
+L(\{ p_i \}, \{ t_i \}) = \frac{1}{N_{cls}} \sum_{i} L_{cls} (p_i, p_i^{*}) + \lambda \frac{1}{N_{reg}} \sum_{i} p_i^{*} L_{reg}(t_i, t_i^{*})
+$$&lt;/div&gt;
+&lt;p&gt;
+Với &lt;span class="math"&gt;\(i\)&lt;/span&gt; là index của anchor trong mini-batch và &lt;span class="math"&gt;\(p_i\)&lt;/span&gt; là xác suất dự đoán của anchor &lt;span class="math"&gt;\(i\)&lt;/span&gt; là một đối tượng. Giá trị nhãn ground-truth &lt;span class="math"&gt;\(p_i^{*}\)&lt;/span&gt; là một nếu anchor là positive, và là không khi anchor là negative.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;span class="math"&gt;\(t_i\)&lt;/span&gt;  là một vector 4 chiều biểu diễn giá trị tọa độ của bounding box đã được dự đoán. &lt;/li&gt;
+&lt;li&gt;&lt;span class="math"&gt;\(t_i^{*}\)&lt;/span&gt; là vector 4 chiều biểu diễn giá trị tọa độ của ground-truth box tương ứng với positive anchor.&lt;/li&gt;
+&lt;li&gt;&lt;span class="math"&gt;\(L_{cls}\)&lt;/span&gt; là log loss của 2 class (object và non-object) &lt;/li&gt;
+&lt;li&gt;&lt;span class="math"&gt;\(L_{reg}\)&lt;/span&gt; dùng SmoothL1Loss&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h4 id="cong-thuc-tinh-smooth-l1"&gt;Công thức tính Smooth L1&lt;/h4&gt;
+&lt;div class="math"&gt;$$
+loss(x, y) = \sum \begin{cases} 
+        0.5 * (x_i - y_i)^2, if |x_i - y_i| &amp;lt; 1 \\  
+        |x_i - y_i| - 0.5,   otherwise   
+        \end{cases} \quad
+$$&lt;/div&gt;
+&lt;figure class='code'&gt;
+&lt;figcaption&gt;&lt;span class="liquid-tags-code-title"&gt;anchor_target_layer.py&lt;/span&gt;&lt;span class="liquid-tags-code-lines"&gt;[Lines 208-227]&lt;/span&gt;&lt;a href='/code/rpn/anchor_target_layer.py'&gt;download&lt;/a&gt;&lt;/figcaption&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;    &lt;span class="n"&gt;bbox_targets&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;_compute_targets&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;anchors&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;gt_boxes&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;argmax_overlaps&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;:])&lt;/span&gt;
+
+    &lt;span class="n"&gt;bbox_inside_weights&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;np&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;zeros&lt;/span&gt;&lt;span class="p"&gt;((&lt;/span&gt;&lt;span class="nb"&gt;len&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;inds_inside&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="mi"&gt;4&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="n"&gt;dtype&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;np&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;float32&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;bbox_inside_weights&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;labels&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;:]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;np&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;array&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;cfg&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;TRAIN&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;RPN_BBOX_INSIDE_WEIGHTS&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+    &lt;span class="n"&gt;bbox_outside_weights&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;np&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;zeros&lt;/span&gt;&lt;span class="p"&gt;((&lt;/span&gt;&lt;span class="nb"&gt;len&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;inds_inside&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="mi"&gt;4&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="n"&gt;dtype&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;np&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;float32&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;cfg&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;TRAIN&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;RPN_POSITIVE_WEIGHT&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="c1"&gt;# uniform weighting of examples (given non-uniform sampling)&lt;/span&gt;
+        &lt;span class="n"&gt;num_examples&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;np&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;sum&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;labels&lt;/span&gt; &lt;span class="o"&gt;&amp;gt;=&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;
+        &lt;span class="n"&gt;positive_weights&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;np&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ones&lt;/span&gt;&lt;span class="p"&gt;((&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;4&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="mf"&gt;1.0&lt;/span&gt; &lt;span class="o"&gt;/&lt;/span&gt; &lt;span class="n"&gt;num_examples&lt;/span&gt;
+        &lt;span class="n"&gt;negative_weights&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;np&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ones&lt;/span&gt;&lt;span class="p"&gt;((&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;4&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="mf"&gt;1.0&lt;/span&gt; &lt;span class="o"&gt;/&lt;/span&gt; &lt;span class="n"&gt;num_examples&lt;/span&gt;
+    &lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;assert&lt;/span&gt; &lt;span class="p"&gt;((&lt;/span&gt;&lt;span class="n"&gt;cfg&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;TRAIN&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;RPN_POSITIVE_WEIGHT&lt;/span&gt; &lt;span class="o"&gt;&amp;gt;&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;&amp;amp;&lt;/span&gt;
+                &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;cfg&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;TRAIN&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;RPN_POSITIVE_WEIGHT&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+        &lt;span class="n"&gt;positive_weights&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;cfg&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;TRAIN&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;RPN_POSITIVE_WEIGHT&lt;/span&gt; &lt;span class="o"&gt;/&lt;/span&gt;
+                            &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;np&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;sum&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;labels&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="n"&gt;negative_weights&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;((&lt;/span&gt;&lt;span class="mf"&gt;1.0&lt;/span&gt; &lt;span class="o"&gt;-&lt;/span&gt; &lt;span class="n"&gt;cfg&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;TRAIN&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;RPN_POSITIVE_WEIGHT&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;/&lt;/span&gt;
+                            &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;np&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;sum&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;labels&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="n"&gt;bbox_outside_weights&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;labels&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;:]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;positive_weights&lt;/span&gt;
+    &lt;span class="n"&gt;bbox_outside_weights&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;labels&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;:]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;negative_weights&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;/figure&gt;
+&lt;p&gt;&lt;code&gt;bbox_inside_weights&lt;/code&gt; tương ứng với giá trị nhãn &lt;span class="math"&gt;\(p_{i}^{*}\)&lt;/span&gt; có giá trị bằng một khi anchor tương ứng là positive anchors
+&lt;code&gt;bbox_outside_weights&lt;/code&gt;  là hệ số để cân bằng giữa positive anchor và negative anchors  và đã nhân với giá trị  &lt;span class="math"&gt;\(\frac{1}{N_{reg}}\)&lt;/span&gt; . Trong cấu hình đưa ra bởi tác giả thì &lt;code&gt;TRAIN.RPN_POSITIVE_WEIGHT = -1&lt;/code&gt;. Lúc này giá trị hệ số là bằng nhau.
+Định ngĩa của loss function&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="nx"&gt;layer&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nx"&gt;name&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;rpn_loss_bbox&amp;quot;&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="k"&gt;type&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;SmoothL1Loss&amp;quot;&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nx"&gt;bottom&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;rpn_bbox_pred&amp;quot;&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nx"&gt;bottom&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;rpn_bbox_targets&amp;quot;&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nx"&gt;bottom&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="err"&gt;&amp;#39;&lt;/span&gt;&lt;span class="nx"&gt;rpn_bbox_inside_weights&lt;/span&gt;&lt;span class="err"&gt;&amp;#39;&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nx"&gt;bottom&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="err"&gt;&amp;#39;&lt;/span&gt;&lt;span class="nx"&gt;rpn_bbox_outside_weights&lt;/span&gt;&lt;span class="err"&gt;&amp;#39;&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nx"&gt;top&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;rpn_loss_bbox&amp;quot;&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nx"&gt;loss_weight&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;
+&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="nx"&gt;smooth_l1_loss_param&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;sigma&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="m m-Double"&gt;3.0&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;h3 id="loi-ket"&gt;Lời kết&lt;/h3&gt;
+&lt;p&gt;Tôi đã gặp khó khăn rất nhiều khi tìm hiểu lý thuyết cũng như cách huấn luyện mạng Faster RCNN. Bài viết này nhằm chia sẻ những điều tôi đã học được cũng như cách tôi đã viết lại Faster RCNN bằng pytorch như thế nào. 
+Bạn có thể tham khảo tại github của tôi. &lt;a href="https://github.com/anhlt/faster_rcnn"&gt;pytorch faster rcnn&lt;/a&gt;&lt;/p&gt;
+&lt;h3 id="trich-dan"&gt;Trích Dẫn&lt;/h3&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;a href="https://www.quora.com/How-does-RPN-work-on-the-Faster-R-CNN?no_redirect=1" title="How-does-RPN-work-on-the-Faster-R-CNN"&gt;"How-does-RPN-work-on-the-Faster-R-CNN"&lt;/a&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;script type="text/javascript"&gt;if (!document.getElementById('mathjaxscript_pelican_#%@#$@#')) {
+    var align = "center",
+        indent = "0em",
+        linebreak = "false";
+
+    if (false) {
+        align = (screen.width &lt; 768) ? "left" : align;
+        indent = (screen.width &lt; 768) ? "0em" : indent;
+        linebreak = (screen.width &lt; 768) ? 'true' : linebreak;
+    }
+
+    var mathjaxscript = document.createElement('script');
+    mathjaxscript.id = 'mathjaxscript_pelican_#%@#$@#';
+    mathjaxscript.type = 'text/javascript';
+    mathjaxscript.src = 'https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.3/latest.js?config=TeX-AMS-MML_HTMLorMML';
+
+    var configscript = document.createElement('script');
+    configscript.type = 'text/x-mathjax-config';
+    configscript[(window.opera ? "innerHTML" : "text")] =
+        "MathJax.Hub.Config({" +
+        "    config: ['MMLorHTML.js']," +
+        "    TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'none' } }," +
+        "    jax: ['input/TeX','input/MathML','output/HTML-CSS']," +
+        "    extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']," +
+        "    displayAlign: '"+ align +"'," +
+        "    displayIndent: '"+ indent +"'," +
+        "    showMathMenu: true," +
+        "    messageStyle: 'normal'," +
+        "    tex2jax: { " +
+        "        inlineMath: [ ['\\\\(','\\\\)'] ], " +
+        "        displayMath: [ ['$$','$$'] ]," +
+        "        processEscapes: true," +
+        "        preview: 'TeX'," +
+        "    }, " +
+        "    'HTML-CSS': { " +
+        "        availableFonts: ['STIX', 'TeX']," +
+        "        preferredFont: 'STIX'," +
+        "        styles: { '.MathJax_Display, .MathJax .mo, .MathJax .mi, .MathJax .mn': {color: 'inherit ! important'} }," +
+        "        linebreaks: { automatic: "+ linebreak +", width: '90% container' }," +
+        "    }, " +
+        "}); " +
+        "if ('default' !== 'default') {" +
+            "MathJax.Hub.Register.StartupHook('HTML-CSS Jax Ready',function () {" +
+                "var VARIANT = MathJax.OutputJax['HTML-CSS'].FONTDATA.VARIANT;" +
+                "VARIANT['normal'].fonts.unshift('MathJax_default');" +
+                "VARIANT['bold'].fonts.unshift('MathJax_default-bold');" +
+                "VARIANT['italic'].fonts.unshift('MathJax_default-italic');" +
+                "VARIANT['-tex-mathit'].fonts.unshift('MathJax_default-italic');" +
+            "});" +
+            "MathJax.Hub.Register.StartupHook('SVG Jax Ready',function () {" +
+                "var VARIANT = MathJax.OutputJax.SVG.FONTDATA.VARIANT;" +
+                "VARIANT['normal'].fonts.unshift('MathJax_default');" +
+                "VARIANT['bold'].fonts.unshift('MathJax_default-bold');" +
+                "VARIANT['italic'].fonts.unshift('MathJax_default-italic');" +
+                "VARIANT['-tex-mathit'].fonts.unshift('MathJax_default-italic');" +
+            "});" +
+        "}";
+
+    (document.body || document.getElementsByTagName('head')[0]).appendChild(configscript);
+    (document.body || document.getElementsByTagName('head')[0]).appendChild(mathjaxscript);
+}
+&lt;/script&gt;</content><category term="Deep Learning"></category><category term="RPN"></category><category term="faster_rcnn"></category><category term="vietnamese"></category><category term="explained"></category></entry></feed>

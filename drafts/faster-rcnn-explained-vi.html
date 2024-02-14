@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <!-- Required meta tags -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+  <title>  Giải thích về mô hình Faster RCNN - Phần 2: Fast RCNN | Random Thoughts
+</title>
+  <link rel="canonical" href="https://anhlt.github.io/drafts/faster-rcnn-explained-vi.html">
+
+
+  <link rel="stylesheet" href="https://anhlt.github.io/theme/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://anhlt.github.io/theme/css/fontawesome.min.css">
+  <link rel="stylesheet" href="https://anhlt.github.io/theme/css/pygments/default.min.css">
+  <link rel="stylesheet" href="https://anhlt.github.io/theme/css/theme.css">
+
+  <link rel="alternate" type="application/atom+xml" title="Full Atom Feed"
+        href="https://anhlt.github.io/feeds/all.atom.xml">
+  <link rel="alternate" type="application/atom+xml" title="Categories Atom Feed"
+        href="https://anhlt.github.io/feeds/deep-learning.atom.xml">  
+  <meta name="description" content="Fast RCNN">
+  <script>
+    (function(i, s, o, g, r, a, m) {
+      i['GoogleAnalyticsObject'] = r;
+      i[r] = i[r] || function() {
+        (i[r].q = i[r].q || []).push(arguments)
+      }, i[r].l = 1 * new Date();
+      a = s.createElement(o);
+      a.async = 1;
+      a.src = g;
+      m = s.getElementsByTagName(o)[0];
+      m.parentNode.insertBefore(a, m)
+    })(window, document, 'script', 'https://www.google-analytics.com/analytics.js', 'ga');
+    ga('create', 'UA-12027115-4', 'auto');
+    ga('send', 'pageview');
+  </script>
+
+
+</head>
+
+<body>
+  <header class="header">
+    <div class="container">
+<div class="row">
+  <div class="col-sm-12">
+    <h1 class="title"><a href="https://anhlt.github.io/">Random Thoughts</a></h1>
+      <p class="text-muted">✨ Suy nghĩ vu vơ</p>
+  </div>
+</div>    </div>
+  </header>
+
+  <div class="main">
+    <div class="container">
+      <h1>  Giải thích về mô hình Faster RCNN - Phần 2: Fast RCNN
+</h1>
+      <hr>
+  <article class="article">
+    <header>
+      <ul class="list-inline">
+        <li class="list-inline-item text-muted" title="2018-01-14T12:17:14+09:00">
+          <i class="fas fa-clock"></i>
+          Sun 14 January 2018
+        </li>
+        <li class="list-inline-item">
+          <i class="fas fa-folder-open"></i>
+          <a href="https://anhlt.github.io/category/deep-learning.html">Deep Learning</a>
+        </li>
+          <li class="list-inline-item">
+            <i class="fas fa-user"></i>
+              <a href="https://anhlt.github.io/author/h4cker.html">h4cker</a>          </li>
+          <li class="list-inline-item">
+            <i class="fas fa-tag"></i>
+              <a href="https://anhlt.github.io/tag/fast_rcnn.html">#fast_rcnn</a>,               <a href="https://anhlt.github.io/tag/faster_rcnn.html">#faster_rcnn</a>,               <a href="https://anhlt.github.io/tag/vietnamese.html">#vietnamese</a>,               <a href="https://anhlt.github.io/tag/explained.html">#explained</a>,               <a href="https://anhlt.github.io/tag/object_detection.html">#object_detection</a>          </li>
+      </ul>
+    </header>
+    <div class="content">
+      <h3 id="mot-so-khai-niem">Một số khái niệm</h3>
+<p>Trong bài viết của mình sử dụng một số thuật ngữ chuyên ngành bằng tiếng anh, vì thế mình sẽ giải thích ý nghĩa của những thuật ngữ đó tại mục này, và sử dụng tiếng Anh trong bài viết của mình</p>
+<ul>
+<li>IOU (Intersection over Union)</li>
+<li>Non-max Suppresion</li>
+<li>Anchors Boxes</li>
+<li>Region proposal</li>
+</ul>
+<h3 id="nguyen-ly">Nguyên lý</h3>
+<h4 id="r-cnn">R-CNN</h4>
+<h4 id="fast-rcnn">Fast RCNN</h4>
+<h4 id="faster-rcnn">Faster RCNN</h4>
+<p>Tổng kết lại ta có bảng so sánh đơn giản về 3 thuật toán trên như sau </p>
+    </div>
+  </article>
+  <hr>
+  <div id="disqus_thread"></div>
+  <script>
+    var disqus_config = function() {
+      this.page.url = 'https://anhlt.github.io/drafts/faster-rcnn-explained-vi.html';
+      this.page.identifier = 'faster-rcnn-explained';
+    };
+    (function() {
+      var d = document;
+      var s = d.createElement('script');
+      s.src = '//deepmlml.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+  <noscript class="text-muted">
+    Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a>
+  </noscript>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="container">
+<div class="row">
+  <ul class="col-sm-6 list-inline">
+      <li class="list-inline-item"><a href="https://anhlt.github.io/authors.html">Authors</a></li>
+    <li class="list-inline-item"><a href="https://anhlt.github.io/archives.html">Archives</a></li>
+    <li class="list-inline-item"><a href="https://anhlt.github.io/categories.html">Categories</a></li>
+      <li class="list-inline-item"><a href="https://anhlt.github.io/tags.html">Tags</a></li>
+  </ul>
+  <p class="col-sm-6 text-sm-right text-muted">
+    Generated by <a href="https://github.com/getpelican/pelican" target="_blank">Pelican</a>
+    / <a href="https://github.com/nairobilug/pelican-alchemy" target="_blank">&#x2728;</a>
+  </p>
+</div>    </div>
+  </footer>
+
+</body>
+
+</html>

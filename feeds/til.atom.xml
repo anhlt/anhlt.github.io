@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Random Thoughts - TIL</title><link href="https://anhlt.github.io/" rel="alternate"></link><link href="https://anhlt.github.io/feeds/til.atom.xml" rel="self"></link><id>https://anhlt.github.io/</id><updated>2023-02-27T12:17:14+09:00</updated><subtitle>✨ Suy nghĩ vu vơ</subtitle><entry><title>Flow of data in MySQL</title><link href="https://anhlt.github.io/mysql-data-flow-vi.html" rel="alternate"></link><published>2023-02-27T12:17:14+09:00</published><updated>2023-02-27T12:17:14+09:00</updated><author><name>h4cker</name></author><id>tag:anhlt.github.io,2023-02-27:/mysql-data-flow-vi.html</id><summary type="html">&lt;p&gt;I will try to explain how MySQL write data to Disk, recovery, WAL log, MVCC&lt;/p&gt;</summary><content type="html">&lt;h1 id="flow-of-data-in-mysql"&gt;Flow of data in MySQL&lt;/h1&gt;
+&lt;p&gt;I will try to explain how MySQL write data to Disk, recovery, WAL log, 
+MVCC.&lt;/p&gt;
+&lt;h1 id="ram-and-disk-pages"&gt;RAM and Disk, Pages&lt;/h1&gt;
+&lt;p&gt;&lt;em&gt;How is data stored physically?&lt;/em&gt; TLDR: DBMS stored data in RAM and Disk&lt;/p&gt;
+&lt;p&gt;Many database are built using 2 types of memory to physically store data.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;RAM: Random access memory or main memory. RAM allows us to access and modify data randomly and fast, the downside of ram is this is volatile, the data in ram will be erased when the computer restart, and the size of RAM is relatively smaller than Disk. &lt;/li&gt;
+&lt;li&gt;Disk: persistent storage. Disk allows us to store huge amount of data, and non-volatile. Sequence read/write speed in Disk is faster than random access on Disk.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;em&gt;How is data stored logically?&lt;/em&gt; TLDR:  Table are stored in Files of Pages of Record.&lt;/p&gt;
+&lt;p&gt;Most databases split files into same-sized pages, that range from 4KB to 16KB. Each page will be identified by &lt;em&gt;PageID&lt;/em&gt;. In one page, there are many records, and each record will have the &lt;em&gt;location&lt;/em&gt; in the page. To access a particular record on Disk, we need to know the &lt;em&gt;pointer&lt;/em&gt; as a pair of &lt;em&gt;(PageID, location)&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;img src="/images/13/Page_buffer_disk.png" width="600" title="'Page_buffer_disk'" alt="'Page_buffer_disk'"&gt;&lt;/p&gt;
+&lt;h1 id="buffer-management"&gt;Buffer management&lt;/h1&gt;
+&lt;p&gt;Because we cannot modify data directly on disk, we need to load data from Disk to RAM, modify, then write back to disk to persist data. The perpose of buffer management is providing the illusion that we are operating in memory. Buffer manage map the pages in memory to pages in disk.&lt;/p&gt;
+&lt;p&gt;The size of RAM is much smaller than Disk, so we need the strategy for loading pages into RAM, and flushing pages in to Disk. There are 2 properties that we need to think about in buffer management.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;&lt;em&gt;Steal&lt;/em&gt;&lt;/strong&gt; Suppose an transaction &lt;em&gt;Trx1&lt;/em&gt; want to read data from page &lt;em&gt;P1&lt;/em&gt;, but the memory is already full as other transactions load other pages to memory, So &lt;em&gt;Trx1&lt;/em&gt; needs to clear some memory, by flush other pages from memory to disk, remove that pages from memory, then load the needed pages from disk to memory. &lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;&lt;em&gt;Force&lt;/em&gt;&lt;/strong&gt; means when the trx1 commit, all the affected pages in memory need to be flushed to disk. &lt;/p&gt;
+&lt;p&gt;Let's think about  &lt;strong&gt;No Steal Policy&lt;/strong&gt; , We don't allow the pages with uncommited changes to be replaced. This is useful for archieving atomicity without UNDO logging. But also need to keep many pages in memory&lt;/p&gt;
+&lt;p&gt;&lt;img src="/images/13/Steal.png" width="600" title="'Steal'" alt="'Steal'"&gt;&lt;/p&gt;
+&lt;p&gt;If we make sure every update are forced onto disk before commit, we are provided durability, but it also cause poor performance by lot of random IO to commit&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Our prefer strategy is  Steal / No-Force&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;No Force&lt;/em&gt; : We don't need to flush modified pages to disk before commit. We will use 2 other data structs to store the changes. &lt;em&gt;Redo log buffer&lt;/em&gt; in ram and &lt;em&gt;Redo Log&lt;/em&gt; in Disk. Before we update any record in pages on buffer pool, we appending a new log entry of &lt;em&gt;Redo log buffer&lt;/em&gt; , and before we commit we will persist the log entries in &lt;em&gt;Redo log buffer&lt;/em&gt; to &lt;em&gt;Redo log&lt;/em&gt;. Instead of randomy flush the pages to disk, we now write the Redo log sequentially to disk.&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;Steal&lt;/em&gt; : By allowing to replace dirty pages, there is some risk. If the transaction is abort, how can we restore to previous value? What if the system crash before the transaction finished? We need undo log&lt;/p&gt;
+&lt;h1 id="redo-log-wal-log"&gt;REDO log (WAL log)&lt;/h1&gt;
+&lt;p&gt;Basic idea, for every operation on buffer pages, we will record that operation to WAL log.
+Log record, there is 4 kind of log record in Redo log&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;em&gt;[START T]&lt;/em&gt; transaction T has begun&lt;/li&gt;
+&lt;li&gt;&lt;em&gt;[COMMIT T]&lt;/em&gt; transaction T has commited&lt;/li&gt;
+&lt;li&gt;&lt;em&gt;[ABORT T]&lt;/em&gt; transaction T &lt;/li&gt;
+&lt;li&gt;&lt;em&gt;[T, X, V]&lt;/em&gt; transaction T has updated the element X with new value v&lt;/li&gt;
+&lt;/ul&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="kr"&gt;BEGIN&lt;/span&gt;
+
+&lt;span class="n"&gt;SELECT&lt;/span&gt; &lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="n"&gt;FROM&lt;/span&gt; &lt;span class="n"&gt;table&lt;/span&gt; &lt;span class="n"&gt;where&lt;/span&gt; &lt;span class="n"&gt;ID&lt;/span&gt;  &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;A&lt;/span&gt;
+
+&lt;span class="n"&gt;UPDATE&lt;/span&gt; &lt;span class="n"&gt;table&lt;/span&gt; &lt;span class="kt"&gt;SET&lt;/span&gt; &lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;16&lt;/span&gt; &lt;span class="n"&gt;where&lt;/span&gt; &lt;span class="n"&gt;ID&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;A&lt;/span&gt;
+
+&lt;span class="n"&gt;SELECT&lt;/span&gt; &lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="n"&gt;FROM&lt;/span&gt; &lt;span class="n"&gt;table&lt;/span&gt; &lt;span class="n"&gt;where&lt;/span&gt; &lt;span class="n"&gt;ID&lt;/span&gt;  &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;B&lt;/span&gt;
+
+
+&lt;span class="n"&gt;UPDATE&lt;/span&gt; &lt;span class="n"&gt;table&lt;/span&gt; &lt;span class="kt"&gt;SET&lt;/span&gt; &lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;16&lt;/span&gt; &lt;span class="n"&gt;where&lt;/span&gt; &lt;span class="n"&gt;ID&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;B&lt;/span&gt;
+
+&lt;span class="n"&gt;COMMIT&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;STEP&lt;/span&gt;&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;3&lt;/span&gt;&lt;span class="w"&gt;      &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;4&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;6&lt;/span&gt;&lt;span class="w"&gt;      &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;7&lt;/span&gt;&lt;span class="w"&gt;             &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;9&lt;/span&gt;&lt;span class="w"&gt;      &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="w"&gt;     &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+&lt;span class="n"&gt;ACTION&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;           &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;READ&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;A&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="n"&gt;t&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;WRITE&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;A&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="n"&gt;t&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;READ&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;B&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;t&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;WRITE&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;B&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;t&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;COMMIT&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="w"&gt;   &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;FLUSH&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;A&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;FLUSH&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;B&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+&lt;span class="n"&gt;MEM__A&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;           &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;       &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;         &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;         &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;     &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;         &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;     &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;     &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+&lt;span class="n"&gt;MEM__B&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;           &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;           &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;       &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;           &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;      &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;         &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;     &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;     &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+&lt;span class="n"&gt;DISK_A&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;       &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;      &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;             &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;     &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;     &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+&lt;span class="n"&gt;DISK_B&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;       &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;      &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;             &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;8&lt;/span&gt;&lt;span class="w"&gt;      &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="w"&gt;     &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+&lt;span class="n"&gt;REDO_L&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;START&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;           &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;       &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;A&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;           &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;       &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;A&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;COMMIT&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;Two important points of WAL log.&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;
+&lt;p&gt;The operations should be write to WAL log buffer before write to pages&lt;/p&gt;
+&lt;p&gt;In the 4th step, we need to write the redo log &lt;strong&gt;[T, A, 16]&lt;/strong&gt; before update the value of A in memory&lt;/p&gt;
+&lt;p&gt;In the 7th step, we need to write the redo log &lt;strong&gt;[T, B, 16]&lt;/strong&gt; before update the value of B in memory&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Must &lt;strong&gt;force&lt;/strong&gt; all log record for a transaction before commit&lt;/p&gt;
+&lt;p&gt;In the 8th step, we need to flush all the previous log entries and the &lt;strong&gt;[COMMIT T]&lt;/strong&gt; to WAL log in Disk before return success response.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;If the system crashed after we wrote the [COMMIT T] to disk. In the WAL log on disk we have&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;START&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;A&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;,[&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;A&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;COMMIT&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;So we can redo the the log.&lt;/p&gt;
+&lt;p&gt;If the system crashed before we wrote the [COMMIT T] to disk. We should ignore the transaction T. &lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;START&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;A&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;,[&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;A&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;h1 id="the-flow-of-data"&gt;The flow of data&lt;/h1&gt;
+&lt;p&gt;A log sequence number (LSN) represents the offset, in bytes, of a log record from the beginning of a database log file&lt;/p&gt;
+&lt;p&gt;FlushedLSN represent the last LSN that have been flushed to Disk&lt;/p&gt;
+&lt;p&gt;PageLSN represent the LSN of last log entry, which updated this page&lt;/p&gt;
+&lt;p&gt;&lt;img src="/images/13/data_flow.png" width="600" title="'data_flow'" alt="'data_flow'"&gt;&lt;/p&gt;
+&lt;p&gt;As we see in the step 4. If the pageLSN in buffer-pool is larger than flushedLSN, we not allow to force the page to disk, because we will lose information in LSN in case of system crash. 
+If the pageLSN smaller than flushedLSN, we are allow to replace the pages with other pages.&lt;/p&gt;
+&lt;h1 id="recovery"&gt;Recovery.&lt;/h1&gt;
+&lt;p&gt;&lt;img src="/images/13/Recovery.png" width="600" title="'Recovery'" alt="'Recovery'"&gt;&lt;/p&gt;
+&lt;h1 id="undo-log"&gt;UNDO Log&lt;/h1&gt;
+&lt;p&gt;As you can see that when we update the the value of any record, we update directly to the pages on buffer pool. How can we revert the value when abort the transaction? To do that, we need to save the old value in some place called UNDO log. By using undo log, we can also provide MVCC for transaction.&lt;/p&gt;
+&lt;h2 id="mysql-data-layout"&gt;Mysql data layout&lt;/h2&gt;
+&lt;p&gt;&lt;img src="/images/13/B_tree.png" width="600" title="'B_tree'" alt="'B_tree'"&gt;&lt;/p&gt;
+&lt;p&gt;In InnoDB the clustered index is actually the table. The leaf node in the clustered index contains &lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;the PK value&lt;/li&gt;
+&lt;li&gt;the transaction ID&lt;/li&gt;
+&lt;li&gt;the rollback pointer for transactional and MVCC&lt;/li&gt;
+&lt;li&gt;the rest of the columns.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="undo-log-entry"&gt;UNDO Log Entry.&lt;/h2&gt;
+&lt;p&gt;There are 2 types of entry in UNDO Log.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Insert entry&lt;/strong&gt;, for new record, we don't have previous value, but we still need to insert the Inserting entry to UNDO log before update the record value in buffer pool. Insert entry contains&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Update entry&lt;/strong&gt;, before we update any record in buffer page, we need to add new update entry with current value of the record to the UNDO log , and then update the value on buffer pool.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;the PK value&lt;/li&gt;
+&lt;li&gt;the transaction ID&lt;/li&gt;
+&lt;li&gt;the rollback pointer, which points to previous version of the record&lt;/li&gt;
+&lt;li&gt;the rest of the columns.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;We could think the UNDO log for every record is a &lt;strong&gt;linked-list&lt;/strong&gt; with head is latest value, and the tail is the &lt;strong&gt;Insert Entry&lt;/strong&gt;&lt;/p&gt;
+&lt;h2 id="undo-log-entry_1"&gt;Undo Log Entry&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;Every transaction will have one undo log entry. The Undo log header contains the transaction ID that start this UNDO log, The update &lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;img src="/images/13/UNDO.png" width="600" title="'UNDO'" alt="'UNDO'"&gt;&lt;/p&gt;
+&lt;h1 id="overall-architecture-of-mysql"&gt;Overall architecture of MySQL&lt;/h1&gt;
+&lt;p&gt;&lt;img src="/images/13/innodb.png" width="600" title="'innodb'" alt="'innodb'"&gt;&lt;/p&gt;
+&lt;p&gt;https://excalidraw.com/#json=gk8L0m-mg9viqWyc_0MTl,F44tZbzcuRKQaTzrP4avJg&lt;/p&gt;</content><category term="TIL"></category><category term="Transaction_Level"></category><category term="Database"></category></entry><entry><title>[Short] Abnomaly in DB</title><link href="https://anhlt.github.io/short-abnomaly-in-db-vi.html" rel="alternate"></link><published>2022-05-21T12:17:14+09:00</published><updated>2022-05-21T12:17:14+09:00</updated><author><name>h4cker</name></author><id>tag:anhlt.github.io,2022-05-21:/short-abnomaly-in-db-vi.html</id><summary type="html">&lt;p&gt;Giải thích về Isolation Level&lt;/p&gt;</summary><content type="html">&lt;p&gt;Khi sủ dụng một hệ quản trị cơ sở dữ liệu, thì một điều cần đáng phải quan tâm đó chính là xử lý song song các transaction. Khi bạn chỉ có một &lt;/p&gt;
+&lt;div class="toc"&gt;&lt;span class="toctitle"&gt;Table of contents:&lt;/span&gt;&lt;ul&gt;
+&lt;li&gt;&lt;a href="#abnomalies"&gt;Abnomalies&lt;/a&gt;&lt;ul&gt;
+&lt;li&gt;&lt;a href="#dirty-read"&gt;Dirty Read&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#unrepeatable-reads-anomaly"&gt;Unrepeatable Reads Anomaly&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#phantom-reads-anomaly"&gt;Phantom Reads Anomaly&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;a href="#isolation-level"&gt;Isolation Level&lt;/a&gt;&lt;ul&gt;
+&lt;li&gt;&lt;a href="#read-uncommitted"&gt;Read Uncommitted&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#read-committed"&gt;Read Committed&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#cursor-stability"&gt;Cursor Stability&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#repeatable-reads"&gt;Repeatable Reads&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#snapshot-isolation"&gt;Snapshot Isolation&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#serializable"&gt;Serializable&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/div&gt;
+&lt;h1 id="abnomalies"&gt;Abnomalies&lt;/h1&gt;
+&lt;h2 id="dirty-read"&gt;Dirty Read&lt;/h2&gt;
+&lt;p&gt;This is situation when a transaction could read uncommited changes from other transactions.&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;┌──────────────────────┬──────────────────────┐
+│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt;                      &lt;/span&gt;│
+│&lt;span class="w"&gt;         &lt;/span&gt;T1&lt;span class="w"&gt;           &lt;/span&gt;│&lt;span class="w"&gt;         &lt;/span&gt;T2&lt;span class="w"&gt;           &lt;/span&gt;│
+├──────────────────────┼──────────────────────┤
+│&lt;span class="w"&gt;       &lt;/span&gt;BEGIN&lt;span class="w"&gt;          &lt;/span&gt;│&lt;span class="w"&gt;                      &lt;/span&gt;│
+│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt;                      &lt;/span&gt;│
+├──────────────────────┼──────────────────────┤
+│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt;       &lt;/span&gt;BEGIN&lt;span class="w"&gt;          &lt;/span&gt;│
+│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt;                      &lt;/span&gt;│
+├──────────────────────┼──────────────────────┤
+│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt;                      &lt;/span&gt;│
+│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt;       &lt;/span&gt;W&lt;span class="o"&gt;(&lt;/span&gt;A&lt;span class="o"&gt;)&lt;/span&gt;&lt;span class="w"&gt;           &lt;/span&gt;│&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;A&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="m"&gt;20&lt;/span&gt;
+├──────────────────────┼──────────────────────┤
+│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt;                      &lt;/span&gt;│
+│&lt;span class="w"&gt;       &lt;/span&gt;R&lt;span class="o"&gt;(&lt;/span&gt;A&lt;span class="o"&gt;)&lt;/span&gt;&lt;span class="w"&gt;           &lt;/span&gt;│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nv"&gt;A&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="m"&gt;20&lt;/span&gt;
+├──────────────────────┼──────────────────────┤
+│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt;                      &lt;/span&gt;│
+│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt;       &lt;/span&gt;ABORT&lt;span class="w"&gt;          &lt;/span&gt;│
+├──────────────────────┼──────────────────────┤
+│&lt;span class="w"&gt;                      &lt;/span&gt;│&lt;span class="w"&gt;                      &lt;/span&gt;│
+│&lt;span class="w"&gt;       &lt;/span&gt;COMMIT&lt;span class="w"&gt;         &lt;/span&gt;│&lt;span class="w"&gt;                      &lt;/span&gt;│
+└──────────────────────┴──────────────────────┘
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;h2 id="unrepeatable-reads-anomaly"&gt;Unrepeatable Reads Anomaly&lt;/h2&gt;
+&lt;h2 id="phantom-reads-anomaly"&gt;Phantom Reads Anomaly&lt;/h2&gt;
+&lt;h1 id="isolation-level"&gt;Isolation Level&lt;/h1&gt;
+&lt;h2 id="read-uncommitted"&gt;Read Uncommitted&lt;/h2&gt;
+&lt;h2 id="read-committed"&gt;Read Committed&lt;/h2&gt;
+&lt;h2 id="cursor-stability"&gt;Cursor Stability&lt;/h2&gt;
+&lt;h2 id="repeatable-reads"&gt;Repeatable Reads&lt;/h2&gt;
+&lt;h2 id="snapshot-isolation"&gt;Snapshot Isolation&lt;/h2&gt;
+&lt;h2 id="serializable"&gt;Serializable&lt;/h2&gt;</content><category term="TIL"></category><category term="Transaction_Level"></category><category term="Database"></category></entry><entry><title>[Short] Isolation in Database</title><link href="https://anhlt.github.io/short-isolation-in-database-vi.html" rel="alternate"></link><published>2022-05-20T12:17:14+09:00</published><updated>2022-05-20T12:17:14+09:00</updated><author><name>h4cker</name></author><id>tag:anhlt.github.io,2022-05-20:/short-isolation-in-database-vi.html</id><summary type="html">&lt;p&gt;Introduce to Isolation Level&lt;/p&gt;</summary><content type="html">&lt;p&gt;Tính tách biệt (Isolation) của transaction là tính chất mà mỗi transaction hoạt động hoàn toàn độc lập với nhau, không bị ảnh huởng bởi nhung transaction khác.
+Để cải thiện tốc độ xử lý, khi xử lý nhiều transaction, hệ quản trị cơ sở dữ liệu cần phải lập lịch để thực thi câu lệnh giữa các transaction một cách xen kẽ với nhau.&lt;/p&gt;
+&lt;div class="toc"&gt;&lt;span class="toctitle"&gt;Table of contents:&lt;/span&gt;&lt;ul&gt;
+&lt;li&gt;&lt;a href="#mot-so-khai-niem"&gt;Một số khái niệm&lt;/a&gt;&lt;ul&gt;
+&lt;li&gt;&lt;a href="#serial-schedule-lich-thuc-thi-tuan-tu"&gt;Serial Schedule (Lịch thực thi tuần tự)&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="#_1"&gt;&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/div&gt;
+&lt;h1 id="mot-so-khai-niem"&gt;Một số khái niệm&lt;/h1&gt;
+&lt;h2 id="serial-schedule-lich-thuc-thi-tuan-tu"&gt;Serial Schedule (Lịch thực thi tuần tự)&lt;/h2&gt;
+&lt;p&gt;Một lịch thực thi tuần tự là lịch thực thi mà các câu lệnh không chạy xen kẽ với nhau.&lt;/p&gt;
+&lt;p&gt;Ví dụ:
+Chúng ta có 2 transaction như sau, cơ sở dữ liệu cần phải lập lịch để thực thi những câu lệnh trong mỗi transaction&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;T1&lt;/span&gt;
+&lt;span class="kr"&gt;BEGIN&lt;/span&gt;
+&lt;span class="n"&gt;A&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;A&lt;/span&gt; &lt;span class="o"&gt;-&lt;/span&gt; &lt;span class="mi"&gt;100&lt;/span&gt;
+&lt;span class="n"&gt;B&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;B&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="mi"&gt;100&lt;/span&gt;
+&lt;span class="n"&gt;COMMIT&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;T2&lt;/span&gt;
+&lt;span class="kr"&gt;BEGIN&lt;/span&gt;
+&lt;span class="n"&gt;A&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;A&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="mf"&gt;0.01&lt;/span&gt;
+&lt;span class="n"&gt;B&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;B&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="mf"&gt;0.01&lt;/span&gt;
+&lt;span class="n"&gt;COMMIT&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;p&gt;Một lịch thực thi tuần tự sẽ sắp xếp cho T1 hoàn thành trước, sau đó thực thi T2, hoặc ngược lại.&lt;/p&gt;
+&lt;p&gt;Ví dụ&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;code&gt;&lt;span class="n"&gt;T1&lt;/span&gt;          &lt;span class="n"&gt;T2&lt;/span&gt;
+&lt;span class="kr"&gt;BEGIN&lt;/span&gt;
+&lt;span class="n"&gt;A&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;A&lt;/span&gt; &lt;span class="o"&gt;-&lt;/span&gt; &lt;span class="mi"&gt;100&lt;/span&gt;
+&lt;span class="n"&gt;B&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;B&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="mi"&gt;100&lt;/span&gt;
+&lt;span class="n"&gt;COMMIT&lt;/span&gt;
+            &lt;span class="kr"&gt;BEGIN&lt;/span&gt;
+            &lt;span class="n"&gt;A&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;A&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="mf"&gt;0.01&lt;/span&gt;
+            &lt;span class="n"&gt;B&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;B&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt; &lt;span class="mf"&gt;0.01&lt;/span&gt;
+            &lt;span class="n"&gt;COMMIT&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+
+&lt;h2 id="_1"&gt;&lt;/h2&gt;</content><category term="TIL"></category><category term="Transaction_Level"></category><category term="Database"></category></entry></feed>

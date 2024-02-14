@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <!-- Required meta tags -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+  <title>  Nodejs eventloop hoạt động như thế nào, Libuv, epoll | Random Thoughts
+</title>
+  <link rel="canonical" href="https://anhlt.github.io/nodejs-eventloop-hoat-dong-nhu-the-nao-libuv-epoll-vi.html">
+
+
+  <link rel="stylesheet" href="https://anhlt.github.io/theme/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://anhlt.github.io/theme/css/fontawesome.min.css">
+  <link rel="stylesheet" href="https://anhlt.github.io/theme/css/pygments/default.min.css">
+  <link rel="stylesheet" href="https://anhlt.github.io/theme/css/theme.css">
+
+  <link rel="alternate" type="application/atom+xml" title="Full Atom Feed"
+        href="https://anhlt.github.io/feeds/all.atom.xml">
+  <link rel="alternate" type="application/atom+xml" title="Categories Atom Feed"
+        href="https://anhlt.github.io/feeds/programing.atom.xml">  
+  <meta name="description" content="Libuv , epoll hoạt động như thế nào">
+  <script>
+    (function(i, s, o, g, r, a, m) {
+      i['GoogleAnalyticsObject'] = r;
+      i[r] = i[r] || function() {
+        (i[r].q = i[r].q || []).push(arguments)
+      }, i[r].l = 1 * new Date();
+      a = s.createElement(o);
+      a.async = 1;
+      a.src = g;
+      m = s.getElementsByTagName(o)[0];
+      m.parentNode.insertBefore(a, m)
+    })(window, document, 'script', 'https://www.google-analytics.com/analytics.js', 'ga');
+    ga('create', 'UA-12027115-4', 'auto');
+    ga('send', 'pageview');
+  </script>
+
+
+</head>
+
+<body>
+  <header class="header">
+    <div class="container">
+<div class="row">
+  <div class="col-sm-12">
+    <h1 class="title"><a href="https://anhlt.github.io/">Random Thoughts</a></h1>
+      <p class="text-muted">✨ Suy nghĩ vu vơ</p>
+  </div>
+</div>    </div>
+  </header>
+
+  <div class="main">
+    <div class="container">
+      <h1>  Nodejs eventloop hoạt động như thế nào, Libuv, epoll
+</h1>
+      <hr>
+  <article class="article">
+    <header>
+      <ul class="list-inline">
+        <li class="list-inline-item text-muted" title="2020-12-28T12:17:14+09:00">
+          <i class="fas fa-clock"></i>
+          Mon 28 December 2020
+        </li>
+        <li class="list-inline-item">
+          <i class="fas fa-folder-open"></i>
+          <a href="https://anhlt.github.io/category/programing.html">Programing</a>
+        </li>
+          <li class="list-inline-item">
+            <i class="fas fa-user"></i>
+              <a href="https://anhlt.github.io/author/h4cker.html">h4cker</a>          </li>
+          <li class="list-inline-item">
+            <i class="fas fa-tag"></i>
+              <a href="https://anhlt.github.io/tag/eventloop.html">#eventloop</a>,               <a href="https://anhlt.github.io/tag/epoll.html">#epoll</a>,               <a href="https://anhlt.github.io/tag/socket.html">#socket</a>,               <a href="https://anhlt.github.io/tag/javascript.html">#javascript</a>,               <a href="https://anhlt.github.io/tag/libuv.html">#libuv</a>          </li>
+      </ul>
+    </header>
+    <div class="content">
+      <p>Một ngày cuối năm đẹp trời, tôi bị đứa bạn thân ai nấy lo lâu năm hỏi một câu, mày biết tại sao cái thằng Nodejs, Redis là Single-Thread nhưng mà sao nó vẫn chạy nhanh như thế không. Thú thật là mình không biết, vào đọc mấy cái medium thì cũng k hiểu gì. Thôi thì tự code một cái event-loop , cũng là để hiểu event-loop nó hoạt động như thế nào.</p>
+<div class="toc"><span class="toctitle">Table of contents:</span><ul>
+<li><a href="#mot-so-khai-niem">Một số khái niệm</a><ul>
+<li><a href="#file-descriptors-file-descriptor-table">File Descriptors / File Descriptor Table</a></li>
+<li><a href="#timer-callback">Timer / Callback</a></li>
+<li><a href="#libuv-eventloop">Libuv / Eventloop</a></li>
+</ul>
+</li>
+<li><a href="#blocking-socket-server">Blocking Socket Server</a></li>
+<li><a href="#non-blocking-socket-server">Non-Blocking Socket Server</a><ul>
+<li><a href="#co-ket-noi-moi-tu-client">Có kết nối mới từ client</a></li>
+<li><a href="#co-du-lieu-tu-ket-noi">Có dữ liệu từ kết nối:</a></li>
+<li><a href="#co-tin-hieu-hoi-ap-cho-client">Có tín hiệu hồi đáp cho client.</a></li>
+</ul>
+</li>
+<li><a href="#libuv">LibUV</a></li>
+</ul>
+</div>
+<h2 id="mot-so-khai-niem">Một số khái niệm</h2>
+<p>Nào cùng nhau tra cứu một số khái niệm, để hiểu được bài viết này, cảnh báo là nhiều chữ và nhiều code nên các bạn cứ thảnh thơi ra làm ấm trà, điếu thuốc rồi vào đọc cho nó thư thả.</p>
+<h3 id="file-descriptors-file-descriptor-table">File Descriptors / File Descriptor Table</h3>
+<p>Trong linux có một câu nói khá nổi tiếng <code>Everything is a file</code>, File ở đây có thể là.</p>
+<ul>
+<li>File <em>(Đương nhiên rồi)</em></li>
+<li>Terminal I/O (stdin/stdout/stderr)</li>
+<li>pipe</li>
+<li>sockets</li>
+<li>device</li>
+</ul>
+<p>Khi một tiến trình được khởi chạy thì mặc định sẽ được truy cập đến 3 tài nguyên</p>
+<ul>
+<li>stdin</li>
+<li>stdout</li>
+<li>stderr</li>
+</ul>
+<p>Các tài nguyên này được lưu trong bảng gọi là <strong>File Descriptor Table</strong> (<code>FDTable</code>) với chỉ số (index) là File Descriptor(<code>FD</code>)</p>
+<table>
+<thead>
+<tr>
+<th>FD</th>
+<th>Pointer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>stdin pointer</td>
+</tr>
+<tr>
+<td>2</td>
+<td>stdout pointer</td>
+</tr>
+<tr>
+<td>3</td>
+<td>stderr pointer</td>
+</tr>
+</tbody>
+</table>
+<p>Nếu tiến trình này mở một file mới, thì file mới sẽ được add vào <code>FDTable</code>, Tương tự khi tiến trình này mở 1 connection, một pipe, tất cả các tài nguyên này, đều là file, và được lưu ở <code>FDTable</code></p>
+<table>
+<thead>
+<tr>
+<th>FD</th>
+<th>Pointer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>stdin pointer</td>
+</tr>
+<tr>
+<td>2</td>
+<td>stdout pointer</td>
+</tr>
+<tr>
+<td>3</td>
+<td>stderr pointer</td>
+</tr>
+<tr>
+<td>4</td>
+<td>file pointer</td>
+</tr>
+</tbody>
+</table>
+<h3 id="timer-callback">Timer / Callback</h3>
+<p>Cùng nói qua một chút về <code>timer</code> và <code>callback</code> trong <code>javascipt</code>. Chúng ta cùng xem xét đoạn code sau</p>
+<div class="highlight"><pre><span></span><code>setTimeout(function cb() {
+    console.log(&quot;callback&quot;)
+}, 5000)
+</code></pre></div>
+
+<p>thì nodejs sẽ khởi tạo 1 <code>timer</code>, sau khi <code>timer</code>đó kết thúc, thì sẽ đẩy <code>callback</code> vào <code>task queue</code></p>
+<p><span class="videobox">
+            <video width="800" height="300" preload="none" controls poster="None"><source src='images/09/timer3.mp4' type='video/mp4; codecs="avc1.42E01E, mp4a.40.2"'></video></span></p>
+<h3 id="libuv-eventloop">Libuv / Eventloop</h3>
+<p>Nhắc đến <strong>Event Loop</strong> trong javascript thì chắc chẳng ai còn lạ gì nữa, nếu thấy lạ thì mời bạn xem video rất nổi tiếng sau đây:</p>
+<p><span class="videobox">
+                    <iframe width="640" height="390"
+                        src='https://www.youtube.com/embed/8aGhZQkoFbQ'
+                        frameborder='0' webkitAllowFullScreen
+                        mozallowfullscreen allowFullScreen>
+                    </iframe>
+                </span></p>
+<p>Libuv là gì, nó là thư viện để xử lý các vấn đề liên quan đến bất đồng bộ. Libuv là nền tảng của event-loop trong Nodejs. Video ở trên đã giải thích được nodejs tương tác với stack , task queue, event loop như thế nào. Bài viết này sẽ giải thích cách mà event loop hoạt đột. </p>
+<div class="highlight"><pre><span></span><code><span class="w">    </span><span class="nx">libuv</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="nx">a</span><span class="w"> </span><span class="nx">multi</span><span class="o">-</span><span class="nx">platform</span><span class="w"> </span><span class="nx">support</span><span class="w"> </span><span class="kn">library</span><span class="w"> </span><span class="nx">with</span><span class="w"> </span><span class="nx">a</span><span class="w"> </span><span class="nx">focus</span><span class="w"> </span><span class="nx">on</span><span class="w"> </span><span class="nx">asynchronous</span><span class="w"> </span><span class="nx">I</span><span class="o">/</span><span class="nx">O</span><span class="p">.</span><span class="w"> </span>
+<span class="w">    </span><span class="nx">It</span><span class="w"> </span><span class="nx">was</span><span class="w"> </span><span class="nx">primarily</span><span class="w"> </span><span class="nx">developed</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="nx">use</span><span class="w"> </span><span class="nx">by</span><span class="w"> </span><span class="nx">Node</span><span class="p">.</span><span class="nx">js</span><span class="p">,</span><span class="w"> </span><span class="nx">but</span><span class="w"> </span><span class="nx">it</span><span class="err">&#39;</span><span class="nx">s</span><span class="w"> </span><span class="nx">also</span><span class="w"> </span><span class="nx">used</span><span class="w"> </span><span class="nx">by</span><span class="w"> </span><span class="nx">Luvit</span><span class="p">,</span><span class="w"> </span><span class="nx">Julia</span><span class="p">,</span><span class="w"> </span><span class="nx">pyuv</span><span class="p">,</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="nx">others</span><span class="p">.</span>
+</code></pre></div>
+
+<p><img src="images/09/nodejs_system.png" width="500" title="'Node JS System'" alt="'Node JS System'"></p>
+<p>Để dễ hiểu hơn về cơ chế hoạt động của event-loop. hãy bắt đầu thử viết một event loop đơn giản, xử lý kết nối qua socket. Tôi sẽ đưa ra 2 ví dụ về 2 cách viết.</p>
+<h2 id="blocking-socket-server">Blocking Socket Server</h2>
+<figure class='code'>
+<figcaption><span class="liquid-tags-code-filename">blocking_socket.py</span><a href='/code/09/blocking_socket.py'>download</a></figcaption>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">socket</span>
+
+<span class="n">EOL</span> <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span>
+<span class="n">response</span> <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;Hello world&#39;</span>
+<span class="n">HOST</span> <span class="o">=</span> <span class="s1">&#39;127.0.0.1&#39;</span>  <span class="c1"># The server&#39;s hostname or IP address</span>
+<span class="n">PORT</span> <span class="o">=</span> <span class="mi">65432</span>        <span class="c1"># The port used by the server</span>
+
+<span class="k">with</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SOCK_STREAM</span><span class="p">)</span> <span class="k">as</span> <span class="n">server</span><span class="p">:</span>
+    <span class="n">server</span><span class="o">.</span><span class="n">bind</span><span class="p">((</span><span class="n">HOST</span><span class="p">,</span> <span class="n">PORT</span><span class="p">))</span>
+    <span class="n">server</span><span class="o">.</span><span class="n">listen</span><span class="p">()</span>
+
+    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="n">conn</span><span class="p">,</span> <span class="n">address</span> <span class="o">=</span> <span class="n">server</span><span class="o">.</span><span class="n">accept</span><span class="p">()</span>
+        <span class="k">with</span> <span class="n">conn</span><span class="p">:</span>
+            <span class="n">req</span> <span class="o">=</span> <span class="sa">b</span><span class="s1">&#39;&#39;</span>
+            <span class="k">while</span> <span class="n">EOL</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">req</span><span class="p">:</span>
+                <span class="n">req</span> <span class="o">+=</span> <span class="n">conn</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="mi">1024</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;-&#39;</span> <span class="o">*</span> <span class="mi">50</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="n">req</span><span class="o">.</span><span class="n">decode</span><span class="p">())</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;-&#39;</span> <span class="o">*</span> <span class="mi">50</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+
+            <span class="n">conn</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+</code></pre></div>
+
+</figure>
+<p>Nói đến lập trình socketsocket thì ví dụ trên là một chương trình socket điển hình. 
+- Khởi tạo một socket server, lắng nghe ở port <code>654321</code>. 
+- Tạo một vòng lặp vô tận, chờ một kết nối đến
+    - nhận dữ liệu từ client cho đến khi có kí tự <code>EOL</code> trong nội dung.
+    - Đóng kết nối và gửi lại client nội dung <code>Hello world</code>
+    - Tiếp tục một vòng lặp mới</p>
+<p>Nhưng vấn đề ở chương trình này là gì, đó là nó bị <code>blocking</code> ở câu lệnh sau </p>
+<div class="highlight"><pre><span></span><code>    <span class="n">conn</span><span class="p">,</span> <span class="n">address</span> <span class="o">=</span> <span class="n">server</span><span class="o">.</span><span class="n">accept</span><span class="p">()</span>
+</code></pre></div>
+
+<p>Tại dòng lệnh này thì trình dịch python sẽ dừng chương trình lại, không xử lý gì cả, chờ đợt cho đến khi có một connection mới. Thuật ngữ thường được gọi là <code>blocking IO</code>. Khi có dữ liệu mới từ client, chương trình tiếp tục xử lý và sau đó quay lại chu kì lặp và tiếp tục chờ đợi. Dẫn đến chương trình này chỉ làm việc được với tối đa 1 client trong 1 thời điểm, những client sau đó phải chờ cho đến khi client trước đó hoàn thành phiên làm việc mới được xử lý.</p>
+<p>Các bạn có thể xem demo chường trình này dưới đây, tôi cùng một lúc khởi tạo 2 client với id là <code>1</code> và <code>2</code> đến socket server. Mỗi client hoạt động theo logic như sau:
+- Khởi tạo kết nối đến server
+- Sau một khoảng thời gian nhất định, gửi 1 xâu có giá trị <code>hello from {client_id}</code> đến server
+- Sau 10 lần gửi thông điệp client sẽ gửi <code>EOL</code> đến server</p>
+<p>Các bạn có thể thấy, server xử lý tuần tự 1 client trong 1 thời điểm, sau khi hoàn thành xử lý với <code>client 1</code>, thì server mới tiếp tục làm việc với <code>client 2</code> </p>
+<p><a href="https://asciinema.org/a/OMX7Buub9ksUi9k7eLiUSK6g8"><img alt="asciicast" src="https://asciinema.org/a/OMX7Buub9ksUi9k7eLiUSK6g8.svg"></a></p>
+<figure class='code'>
+<figcaption><span class="liquid-tags-code-title">client.py</span><a href='/code/09/client.py'>download</a></figcaption>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">socket</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">SupportsInt</span>
+
+
+<span class="kn">import</span> <span class="nn">argparse</span>
+<span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s1">&#39;Process some integers.&#39;</span><span class="p">)</span>
+<span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;client_id&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">&quot;store&quot;</span><span class="p">)</span>
+<span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;inteval&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">&quot;store&quot;</span><span class="p">)</span>
+<span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
+<span class="n">inteval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">inteval</span>
+<span class="n">client_id</span> <span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">client_id</span>
+
+
+
+<span class="n">HOST</span> <span class="o">=</span> <span class="s1">&#39;127.0.0.1&#39;</span>  <span class="c1"># The server&#39;s hostname or IP address</span>
+<span class="n">PORT</span> <span class="o">=</span> <span class="mi">65432</span>        <span class="c1"># The port used by the server</span>
+
+
+<span class="k">with</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SOCK_STREAM</span><span class="p">)</span> <span class="k">as</span> <span class="n">s</span><span class="p">:</span>
+
+    <span class="n">s</span><span class="o">.</span><span class="n">connect</span><span class="p">((</span><span class="n">HOST</span><span class="p">,</span> <span class="n">PORT</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span> <span class="p">:</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">inteval</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">b</span><span class="s1">&#39;hello from </span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">client_id</span><span class="p">)</span>
+        <span class="n">s</span><span class="o">.</span><span class="n">sendall</span><span class="p">(</span><span class="sa">b</span><span class="s1">&#39;hello from </span><span class="si">%d</span><span class="s1">: &#39;</span> <span class="o">%</span> <span class="n">client_id</span><span class="p">)</span>
+    <span class="n">s</span><span class="o">.</span><span class="n">sendall</span><span class="p">(</span><span class="sa">b</span><span class="s1">&#39;Hello, world</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="mi">1024</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Received&#39;</span><span class="p">,</span> <span class="nb">repr</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+</code></pre></div>
+
+</figure>
+<p>Để giải quyết bài toán này thì mọi người thường nghĩ đến một giải pháp là <code>multithread</code>, đây cũng là giải pháp thường được các thầy giáo hướng dẫn ở trong trường đại học. Mỗi khi có một kết nối đến server thì chương trình sẽ khởi tạo 1 thread mới, xử lý data được gửi đến từ client và trả lại dữ liệu cho client.</p>
+<p>Nhược điểm của phương pháp này nó là, mỗi thread sẽ có <code>call stack</code> riêng, và việc chuyển đổi giữa các <code>call stack</code> cũng ảnh hưởng tới hiệu năng của chương trình. Một cách khác để giải quyết vấn đề này đó chính là <code>non-blocking IO</code>, nói một cách khác, chúng ta sẽ không bắt chương trình chờ cho đến khi có data nữa.</p>
+<h2 id="non-blocking-socket-server">Non-Blocking Socket Server</h2>
+<p><img src="images/09/epoll.png" width="500" title="'Epoll'" alt="'Epoll'"></p>
+<p>Để giải quyết bài toán trên mà không sử dụng đến <code>multithread</code>, chúng ta cần sử dụng một <code>system call</code> là <code>epoll</code>. <code>epoll</code> là 1 câu lệnh của hệ điều hành linux (<code>system call</code>), đưa cho <code>epoll</code> một hoặc nhiều <code>file descriptors</code>, <code>epoll</code> sẽ trả về cho chương trình những file nào có thể đọc được.</p>
+<p>Quay lại về bài toán lập trình socket. Để sử dụng <code>epoll</code> thì chúng ta sẽ thay đổi logic như sau:</p>
+<ul>
+<li>Khởi tạo một <code>socket</code>, và <code>epoll</code></li>
+<li>Đăng kí <code>socket file descriptor</code> cùng sự kiện <code>EPOLLIN</code> vào trong <code>epoll</code></li>
+<li>Tại một vòng lặp vô tận:<ul>
+<li>kiểm tra xem epoll có event mới nào không</li>
+<li>nếu có sự kiện mới thì xử lý sự kiện đó, và tiếp tục lặp</li>
+<li>nếu không thì tiếp tục quay lại vòng lặp</li>
+</ul>
+</li>
+</ul>
+<p><img src="images/09/epoll_flow.png" width="500" title="'Epoll Flow'" alt="'Epoll Flow'"></p>
+<figure class='code'>
+<figcaption><span class="liquid-tags-code-title">lang:python</span><span class="liquid-tags-code-filename">non_blocking_socket.py</span><span class="liquid-tags-code-lines">[Lines 67-94]</span><a href='/code/09/non_blocking_socket.py'>download</a></figcaption>
+<div class="highlight"><pre><span></span><code>with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server, epoll_context(server.fileno(), select.EPOLLIN) as epoll:
+    server.bind((HOST, PORT))
+    server.setblocking(False)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    server.listen(5)
+
+    print(&quot;Listening&quot;)
+    connections : Dict[int, socket.socket] = {}
+
+
+    requests : Dict[int, bytes]= {}
+    responses: Dict[int, bytes] = {}
+    server_fd = server.fileno()
+
+    while True:
+        events = epoll.poll(0)
+        print(&quot;waiting..&quot;)
+        for fileno, event in events:
+            if fileno == server_fd:
+                init_connection(server, connections, requests, responses, epoll)
+            elif event &amp; select.EPOLLIN:
+                receive_request(fileno, connections, requests, responses, epoll)
+            elif event &amp; select.EPOLLOUT:
+                send_response(fileno, connections, responses, epoll)
+</code></pre></div>
+
+</figure>
+<p>Đối với mỗi loại event thì server sẽ xử lý bằng những hàm tương ứng, chúng ta cùng xem kỹ hơn cách server xử lý từng loại sự kiện.</p>
+<h3 id="co-ket-noi-moi-tu-client">Có kết nối mới từ client</h3>
+<p>Khi kiểm tra <code>file descriptor</code> của sự kiện mới là <code>socket server file descriptor</code> chúng ta hiểu được rằng là đã có một kết nối đến server.</p>
+<ul>
+<li>Bởi vì kết nối cũng là 1 file, nên chúng ta sẽ đăng kí <code>fd</code> của kết nối này vào trong <code>epoll</code></li>
+<li>Mỗi khi có dữ liệu mới đến từ kết nối này, <code>epoll</code> sẽ tạo event mới cho chúng ta</li>
+</ul>
+<figure class='code'>
+<figcaption><span class="liquid-tags-code-title">lang:python :hideall:</span><span class="liquid-tags-code-filename">non_blocking_socket.py</span><span class="liquid-tags-code-lines">[Lines 26-38]</span><a href='/code/09/non_blocking_socket.py'>download</a></figcaption>
+<div class="highlight"><pre><span></span><code><span class="n">def</span><span class="w"> </span><span class="n">init_connection</span><span class="p">(</span><span class="nl">server</span><span class="p">:</span><span class="w"> </span><span class="n">socket</span><span class="p">.</span><span class="n">socket</span><span class="p">,</span><span class="w"> </span><span class="nl">connections</span><span class="p">:</span><span class="w"> </span><span class="n">Dict</span><span class="o">[</span><span class="n">int, socket.socket</span><span class="o">]</span><span class="p">,</span><span class="w"> </span><span class="n">requests</span><span class="w"> </span><span class="err">:</span><span class="w"> </span><span class="n">Dict</span><span class="o">[</span><span class="n">int, bytes</span><span class="o">]</span><span class="p">,</span><span class="w"> </span><span class="n">responses</span><span class="w"> </span><span class="err">:</span><span class="w"> </span><span class="n">Dict</span><span class="o">[</span><span class="n">int, bytes</span><span class="o">]</span><span class="p">,</span><span class="w"> </span><span class="nl">epoll</span><span class="p">:</span><span class="w"> </span><span class="k">select</span><span class="p">.</span><span class="n">epoll</span><span class="p">)</span><span class="err">:</span>
+
+<span class="w">    </span><span class="nl">conn</span><span class="p">:</span><span class="w"> </span><span class="n">socket</span><span class="p">.</span><span class="n">socket</span>
+<span class="w">    </span><span class="n">conn</span><span class="p">,</span><span class="w"> </span><span class="n">addr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">server</span><span class="p">.</span><span class="n">accept</span><span class="p">()</span>
+<span class="w">    </span><span class="n">conn</span><span class="p">.</span><span class="n">setblocking</span><span class="p">(</span><span class="k">False</span><span class="p">)</span>
+<span class="w">    </span><span class="k">print</span><span class="p">(</span><span class="n">f</span><span class="ss">&quot;New Connection: {addr}&quot;</span><span class="p">)</span>
+
+<span class="w">    </span><span class="n">fd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">conn</span><span class="p">.</span><span class="n">fileno</span><span class="p">()</span>
+
+<span class="w">    </span><span class="n">epoll</span><span class="p">.</span><span class="n">register</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span><span class="w"> </span><span class="k">select</span><span class="p">.</span><span class="n">EPOLLIN</span><span class="p">)</span>
+<span class="w">    </span><span class="n">connections</span><span class="o">[</span><span class="n">fd</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">conn</span>
+<span class="w">    </span><span class="n">requests</span><span class="o">[</span><span class="n">fd</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">b</span><span class="s1">&#39;&#39;</span>
+<span class="w">    </span><span class="n">responses</span><span class="o">[</span><span class="n">fd</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">b</span><span class="s1">&#39;&#39;</span>
+</code></pre></div>
+
+</figure>
+<h3 id="co-du-lieu-tu-ket-noi">Có dữ liệu từ kết nối:</h3>
+<ul>
+<li>Đọc dữ liệu từ kết nối</li>
+<li>Nếu kết nối bị ngắt, xóa <code>fd</code> tương ứng khỏi <code>epoll</code></li>
+<li>Nếu có <code>EOL</code> trong dữ liệu thì set event cho <code>fd</code> trở thành <code>EPOLLOUT</code>, tương ứng với việc thông báo cho chương trình là đã đọc hết dữ liệu từ client này, hãy hồi đáp về cho client</li>
+</ul>
+<figure class='code'>
+<figcaption><span class="liquid-tags-code-title">lang:python :hideall:</span><span class="liquid-tags-code-filename">non_blocking_socket.py</span><span class="liquid-tags-code-lines">[Lines 40-58]</span><a href='/code/09/non_blocking_socket.py'>download</a></figcaption>
+<div class="highlight"><pre><span></span><code><span class="s s-Atom">def</span> <span class="nf">receive_request</span><span class="p">(</span><span class="s s-Atom">fileno</span><span class="p">:</span> <span class="s s-Atom">int</span><span class="p">,</span>  <span class="s s-Atom">connections</span><span class="p">:</span> <span class="nv">Dict</span><span class="p">[</span><span class="s s-Atom">int</span><span class="p">,</span> <span class="s s-Atom">socket</span><span class="p">.</span><span class="s s-Atom">socket</span><span class="p">],</span> <span class="s s-Atom">requests</span> <span class="o">:</span> <span class="nv">Dict</span><span class="p">[</span><span class="s s-Atom">int</span><span class="p">,</span> <span class="s s-Atom">bytes</span><span class="p">],</span> <span class="s s-Atom">responses</span> <span class="o">:</span> <span class="nv">Dict</span><span class="p">[</span><span class="s s-Atom">int</span><span class="p">,</span> <span class="s s-Atom">bytes</span><span class="p">],</span> <span class="s s-Atom">epoll</span><span class="p">:</span> <span class="s s-Atom">select</span><span class="p">.</span><span class="s s-Atom">epoll</span><span class="p">)</span><span class="o">:</span>
+
+    <span class="s s-Atom">requests</span><span class="p">[</span><span class="s s-Atom">fileno</span><span class="p">]</span> <span class="s s-Atom">+=</span> <span class="s s-Atom">connections</span><span class="p">[</span><span class="s s-Atom">fileno</span><span class="p">].</span><span class="nf">recv</span><span class="p">(</span><span class="mi">1024</span><span class="p">)</span>
+
+    <span class="nf">print</span><span class="p">(</span><span class="s s-Atom">f</span><span class="s2">&quot;new updated {fileno} {requests[fileno]}&quot;</span><span class="p">)</span>
+
+    <span class="s s-Atom">if</span> <span class="s s-Atom">requests</span><span class="p">[</span><span class="s s-Atom">fileno</span><span class="p">]</span> <span class="o">==</span> <span class="nv">QUIT</span> <span class="s s-Atom">or</span> <span class="s s-Atom">requests</span><span class="p">[</span><span class="s s-Atom">fileno</span><span class="p">]</span> <span class="o">==</span> <span class="nv">EMPTY</span><span class="o">:</span>
+        <span class="nf">print</span><span class="p">(</span><span class="s s-Atom">&#39;[{:02d}] exit or hung up&#39;</span><span class="p">.</span><span class="nf">format</span><span class="p">(</span><span class="s s-Atom">fileno</span><span class="p">))</span>
+        <span class="s s-Atom">epoll</span><span class="p">.</span><span class="nf">unregister</span><span class="p">(</span><span class="s s-Atom">fileno</span><span class="p">)</span>
+        <span class="s s-Atom">connections</span><span class="p">[</span><span class="s s-Atom">fileno</span><span class="p">].</span><span class="nf">close</span><span class="p">()</span>
+        <span class="s s-Atom">del</span> <span class="s s-Atom">connections</span><span class="p">[</span><span class="s s-Atom">fileno</span><span class="p">],</span> <span class="s s-Atom">requests</span><span class="p">[</span><span class="s s-Atom">fileno</span><span class="p">],</span> <span class="s s-Atom">responses</span><span class="p">[</span><span class="s s-Atom">fileno</span><span class="p">]</span>
+
+    <span class="s s-Atom">elif</span> <span class="nv">EOL</span> <span class="s s-Atom">in</span> <span class="s s-Atom">requests</span><span class="p">[</span><span class="s s-Atom">fileno</span><span class="p">]</span><span class="o">:</span>
+        <span class="s s-Atom">epoll</span><span class="p">.</span><span class="nf">modify</span><span class="p">(</span><span class="s s-Atom">fileno</span><span class="p">,</span> <span class="s s-Atom">select</span><span class="p">.</span><span class="nv">EPOLLOUT</span><span class="p">)</span>
+        <span class="s s-Atom">msg</span> <span class="o">=</span> <span class="s s-Atom">requests</span><span class="p">[</span><span class="s s-Atom">fileno</span><span class="p">][</span><span class="o">:-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="nf">print</span><span class="p">(</span><span class="s2">&quot;[{:02d}] says: {}&quot;</span><span class="p">.</span><span class="nf">format</span><span class="p">(</span><span class="s s-Atom">fileno</span><span class="p">,</span> <span class="s s-Atom">msg</span><span class="p">))</span>
+        <span class="s s-Atom">responses</span><span class="p">[</span><span class="s s-Atom">fileno</span><span class="p">]</span> <span class="o">=</span> <span class="s s-Atom">b&#39;ACK\n&#39;</span>
+        <span class="s s-Atom">requests</span><span class="p">[</span><span class="s s-Atom">fileno</span><span class="p">]</span> <span class="o">=</span> <span class="s s-Atom">b&#39;&#39;</span>
+</code></pre></div>
+
+</figure>
+<h3 id="co-tin-hieu-hoi-ap-cho-client">Có tín hiệu hồi đáp cho client.</h3>
+<ul>
+<li>Gửi dữ liệu cho client</li>
+<li>Đổi loại event cho kết nối thành <code>EPOLLIN</code>, để server tiếp lắng nghe dữ liệu mới trên kết nối này</li>
+</ul>
+<figure class='code'>
+<figcaption><span class="liquid-tags-code-title">lang:python :hideall:</span><span class="liquid-tags-code-filename">non_blocking_socket.py</span><span class="liquid-tags-code-lines">[Lines 59-64]</span><a href='/code/09/non_blocking_socket.py'>download</a></figcaption>
+<div class="highlight"><pre><span></span><code><span class="n">def</span><span class="w"> </span><span class="n">send_response</span><span class="p">(</span><span class="nl">fileno</span><span class="p">:</span><span class="w"> </span><span class="nc">int</span><span class="p">,</span><span class="w">  </span><span class="nl">connections</span><span class="p">:</span><span class="w"> </span><span class="n">Dict</span><span class="o">[</span><span class="n">int, socket.socket</span><span class="o">]</span><span class="p">,</span><span class="w">  </span><span class="n">responses</span><span class="w"> </span><span class="err">:</span><span class="w"> </span><span class="n">Dict</span><span class="o">[</span><span class="n">int, bytes</span><span class="o">]</span><span class="p">,</span><span class="w"> </span><span class="nl">epoll</span><span class="p">:</span><span class="w"> </span><span class="k">select</span><span class="p">.</span><span class="n">epoll</span><span class="p">)</span><span class="err">:</span>
+<span class="w">    </span><span class="ss">&quot;&quot;&quot;Send a response to a client.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="n">byteswritten</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">connections</span><span class="o">[</span><span class="n">fileno</span><span class="o">]</span><span class="p">.</span><span class="n">send</span><span class="p">(</span><span class="n">responses</span><span class="o">[</span><span class="n">fileno</span><span class="o">]</span><span class="p">)</span>
+<span class="w">    </span><span class="n">responses</span><span class="o">[</span><span class="n">fileno</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">responses</span><span class="o">[</span><span class="n">fileno</span><span class="o">][</span><span class="n">byteswritten:</span><span class="o">]</span>
+<span class="w">    </span><span class="n">epoll</span><span class="p">.</span><span class="k">modify</span><span class="p">(</span><span class="n">fileno</span><span class="p">,</span><span class="w"> </span><span class="k">select</span><span class="p">.</span><span class="n">EPOLLIN</span><span class="p">)</span>
+</code></pre></div>
+
+</figure>
+<p><a href="https://asciinema.org/a/DQcgHeBbIcy7AXU1lP5VKeMqr"><img alt="asciicast" src="https://asciinema.org/a/DQcgHeBbIcy7AXU1lP5VKeMqr.svg"></a></p>
+<h2 id="libuv">LibUV</h2>
+<p><img src="images/09/loop_iteration.png" width="500" title="'Epoll'" alt="'Epoll'"></p>
+<p>Nói một cách đơn giản, Libuv chỉ là 1 vòng lặp.</p>
+<ul>
+<li>Đầu tiên chương trình sẽ kiểm tra vòng lặp này có đang hoạt động hay không? Chương trình có handler nào hay không, có kết nối nào hay không</li>
+<li>Thực thi những <code>timer</code> đã hết thời gian chờ. Khi một timer hết hạn, thì <code>callback</code> của timer đó sẽ được đẩy vào queue</li>
+<li>Thực thi các <code>callback</code> đang được pending trong <code>task queue</code>.</li>
+<li>Tính toán thời gian chờ (timeout) khi polling</li>
+<li>Chờ IO trong khoảng thời gian <code>timeout</code></li>
+<li>Kiểm tra <code>callback handler</code> đã được thực thi hay chưa.</li>
+<li>Thực thi <code>close callbacks</code></li>
+</ul>
+    </div>
+  </article>
+  <hr>
+  <div id="disqus_thread"></div>
+  <script>
+    var disqus_config = function() {
+      this.page.url = 'https://anhlt.github.io/nodejs-eventloop-hoat-dong-nhu-the-nao-libuv-epoll-vi.html';
+      this.page.identifier = 'nodejs-eventloop-hoat-dong-nhu-the-nao-libuv-epoll';
+    };
+    (function() {
+      var d = document;
+      var s = d.createElement('script');
+      s.src = '//deepmlml.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+  <noscript class="text-muted">
+    Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a>
+  </noscript>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="container">
+<div class="row">
+  <ul class="col-sm-6 list-inline">
+      <li class="list-inline-item"><a href="https://anhlt.github.io/authors.html">Authors</a></li>
+    <li class="list-inline-item"><a href="https://anhlt.github.io/archives.html">Archives</a></li>
+    <li class="list-inline-item"><a href="https://anhlt.github.io/categories.html">Categories</a></li>
+      <li class="list-inline-item"><a href="https://anhlt.github.io/tags.html">Tags</a></li>
+  </ul>
+  <p class="col-sm-6 text-sm-right text-muted">
+    Generated by <a href="https://github.com/getpelican/pelican" target="_blank">Pelican</a>
+    / <a href="https://github.com/nairobilug/pelican-alchemy" target="_blank">&#x2728;</a>
+  </p>
+</div>    </div>
+  </footer>
+
+</body>
+
+</html>

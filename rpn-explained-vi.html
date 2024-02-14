@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <!-- Required meta tags -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+  <title>  Giải thích về mô hình Faster RCNN - Phần 1: RPN | Random Thoughts
+</title>
+  <link rel="canonical" href="https://anhlt.github.io/rpn-explained-vi.html">
+
+
+  <link rel="stylesheet" href="https://anhlt.github.io/theme/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://anhlt.github.io/theme/css/fontawesome.min.css">
+  <link rel="stylesheet" href="https://anhlt.github.io/theme/css/pygments/default.min.css">
+  <link rel="stylesheet" href="https://anhlt.github.io/theme/css/theme.css">
+
+  <link rel="alternate" type="application/atom+xml" title="Full Atom Feed"
+        href="https://anhlt.github.io/feeds/all.atom.xml">
+  <link rel="alternate" type="application/atom+xml" title="Categories Atom Feed"
+        href="https://anhlt.github.io/feeds/deep-learning.atom.xml">  
+  <meta name="description" content="Region Proposal Networks (RPNs)">
+  <script>
+    (function(i, s, o, g, r, a, m) {
+      i['GoogleAnalyticsObject'] = r;
+      i[r] = i[r] || function() {
+        (i[r].q = i[r].q || []).push(arguments)
+      }, i[r].l = 1 * new Date();
+      a = s.createElement(o);
+      a.async = 1;
+      a.src = g;
+      m = s.getElementsByTagName(o)[0];
+      m.parentNode.insertBefore(a, m)
+    })(window, document, 'script', 'https://www.google-analytics.com/analytics.js', 'ga');
+    ga('create', 'UA-12027115-4', 'auto');
+    ga('send', 'pageview');
+  </script>
+
+
+</head>
+
+<body>
+  <header class="header">
+    <div class="container">
+<div class="row">
+  <div class="col-sm-12">
+    <h1 class="title"><a href="https://anhlt.github.io/">Random Thoughts</a></h1>
+      <p class="text-muted">✨ Suy nghĩ vu vơ</p>
+  </div>
+</div>    </div>
+  </header>
+
+  <div class="main">
+    <div class="container">
+      <h1>  Giải thích về mô hình Faster RCNN - Phần 1: RPN
+</h1>
+      <hr>
+  <article class="article">
+    <header>
+      <ul class="list-inline">
+        <li class="list-inline-item text-muted" title="2017-10-08T03:27:29+09:00">
+          <i class="fas fa-clock"></i>
+          Sun 08 October 2017
+        </li>
+        <li class="list-inline-item">
+          <i class="fas fa-folder-open"></i>
+          <a href="https://anhlt.github.io/category/deep-learning.html">Deep Learning</a>
+        </li>
+          <li class="list-inline-item">
+            <i class="fas fa-user"></i>
+              <a href="https://anhlt.github.io/author/h4cker.html">h4cker</a>          </li>
+          <li class="list-inline-item">
+            <i class="fas fa-tag"></i>
+              <a href="https://anhlt.github.io/tag/rpn.html">#RPN</a>,               <a href="https://anhlt.github.io/tag/faster_rcnn.html">#faster_rcnn</a>,               <a href="https://anhlt.github.io/tag/vietnamese.html">#vietnamese</a>,               <a href="https://anhlt.github.io/tag/explained.html">#explained</a>          </li>
+      </ul>
+    </header>
+    <div class="content">
+      <h3 id="gioi-thieu-ve-faster-rcnn">Giới thiệu về Faster RCNN</h3>
+<p>Faster RCNN là một thuật toán để tìm kiếm vị trí của vật thể trong ảnh. Thuật toán này sẽ có đầu ra là những hình hộp, cùng với vật thể bên trong hộp đó là gì. Phiên bản đầu tiên của Faster RCNN là RCNN, với nguyên lý khá đơn giản. </p>
+<p><a href="/rpn-explained-code-pytorch.html">Phần 2: Giải thích RCNN bằng Pytorch</a></p>
+<hr>
+<h4 id="rcnn">RCNN</h4>
+<ol>
+<li>Tác giả sử dụng một thuật toán gọi là selective search để đưa ra các bounding boxes, hay còn gọi là region proposals, chứa các vùng có thể có vật thể ở trong. </li>
+<li>Sử dụng các mạng đã được huấn luyện sẵn như Alex-net, VGG-16 để tính toán feed-forward các regions thu được convolutional features của mỗi region, sau đó huấn luyện SVM để xác định được vật thể nào được chứa trong region proposal đó. </li>
+<li>Sử dụng Linear Regression để hiệu chỉnh các giá trị ( vị trí các đỉnh) của region proposer </li>
+</ol>
+<h4 id="fast-rcnn">Fast RCNN</h4>
+<ol>
+<li>Sử dụng các mạng huấn luyện sẵn để feed-forward các region proposals, sẽ tốn nhiều thời gian bởi với mỗi ảnh thuật toán selective search sẽ cho ra hàng nghìn region proposals. </li>
+<li>Tác giả sẽ chỉ feed-forward một lần đối với ảnh gốc, thu được convolutional features của ảnh đó. Ví dụ với một hình ảnh có kích thước <span class="math">\(600 * 600 * 3\)</span>, ta sẽ thu được convolutional features với kích thước <span class="math">\(37 * 37 * 512\)</span>. Kích thước của features bị giảm nhỏ khoảng 16 lần <span class="math">\(\frac{600}{37}\)</span>.</li>
+<li>Dựa vào kích thước cùng vị trí của các region proposals đối với ảnh gốc, ta sẽ tính toán được vị trí của region proposal trong convolutional features.</li>
+<li>Sửa dụng giá trị convolutional faetures của region proposal, ta dự đoán được vị trí các đỉnh của bounding box cũng như vật thể nằm trong bounding box là gì.</li>
+</ol>
+<p><img src="/images/rpn/fast_rcnn.png" width="600" title="'Fast RCNN'" alt="'Fast RCNN'"></p>
+<p>Source: https://www.slideshare.net/simplyinsimple/detection-52781995.</p>
+<p>Đối với Fast RCNN , do chia sẻ tính toán giữa các region trong ảnh, tốc độ thực thực thi của thuật toán đã được giảm từ 120s mỗi ảnh xuống 2s. Phần tính toán gây ra nghẽn chính là phần đưa ra các region proposal đầu vào, chỉ có thể thực thi tuần tự trên CPU. Faster RCNN giải quyết vấn đề này bằng cách sử dụng DNN để tính toán các region proposals này.</p>
+<h3 id="rpn">RPN</h3>
+<p>RPN giải quyết các vấn đề trên bằng cách huấn luyện mạng neural network để đảm nhận thay vai trò của các thuật toán như selective search vốn rất chậm chạp.</p>
+<p>Một Region Proposal Network nhận đầu vào là ảnh với kích thước bất kì và cho đầu ra là region proposal (tập vị trí của các hình chữ nhật có thể chứa vật thể), cùng với xác suất chứa vật thể của hình chữ nhật tương ứng.</p>
+<hr>
+<h4 id="cau-truc">Cấu trúc</h4>
+<p>Cách hoạt động RPN có 2 bước chính</p>
+<ol>
+<li>
+<p><strong>Feed-forward ảnh qua DNN thu được convolutional features.</strong></p>
+<p>Trong bài báo gốc, tác giả đã nhắc đến nhiều các mạng Convolution Network có sẵn như VGG-16, ZFNet, để dễ dàng cho việc giải thích, chúng ta sẽ lấy ví dụ ở đây là mạng VGG-16. </p>
+<p>Mạng VGG-16 chứa 13   convolutions layer kích thước <span class="math">\(3 \times 3\)</span> cùng với 5  max pooling layer kích thước <span class="math">\(2 \times 2\)</span>. Khi đầu vào là một ảnh có kích thước <span class="math">\(3 \times W \times H\)</span> , đầu ra sẽ nhận được <span class="math">\(3 \times W^{'} \times H^{'}\)</span> với <span class="math">\(W^{'} = \frac{W}{16}\)</span> <span class="math">\(H^{'} = \frac{H}{16}\)</span></p>
+<p><img src="/images/rpn/step-1.png" width="600" title="'Fast RCNN'" alt="'Fast RCNN'"></p>
+<p>Source: https://www.quora.com/How-does-the-region-proposal-network-RPN-in-Faster-R-CNN-work.</p>
+</li>
+<li>
+<p><strong>Sử dụng một cửa sổ trượt lên convolutional features .</strong></p>
+<p><img src="/images/rpn/rpn.png" width="600" title="'RPN'" alt="'RPN'"></p>
+<p>Để tạo ra region proposals, chúng ta sử dụng một network hay còn gọi là cửa sổ trượt (sliding-window) kích thước <span class="math">\(n \times n\)</span> trượt trên convolutional features. Đầu ra của network này là đầu vào của 2 fully-connected layer dự đoán vị trí của regions (box-regression layer), cũng như xác suất chứa object(box-classification) của hộp ấy. Tại mỗi vị trí của cửa sổ trượt chúng ta dự đoán đồng thời nhiều nhiều region proposal cùng một lúc, với <span class="math">\(k\)</span> là số proposal tương ứng với mỗi vị trí. Vậy <span class="math">\(reg\)</span> layer có <span class="math">\(4k\)</span> đầu ra dự đoán vị trí của <span class="math">\(k\)</span> proposal,  <span class="math">\(cls\)</span> layer chứa <span class="math">\(2k\)</span> đầu ra dự đoán xác suất chứa vật thể của proposal.</p>
+<p>Source: https://www.quora.com/How-does-the-region-proposal-network-RPN-in-Faster-R-CNN-work.</p>
+<p>Tại sao phải tạo ra những anchors này. Theo cách hiểu của bản thân tôi thì, trong bài toán xác định vị trí vật thể, số lượng đầu ra của mỗi ảnh là khác nhau. Ví dụ một bức ảnh có thể có 2 vật thể, một bức ảnh khác có 4 vật thể. Vì số lượng output là không cố định ta phải dựa vào các anchor để cố định hóa số lượng output này. </p>
+<p>Đối với mỗi bức ảnh, ta đều sinh ra các anchors tương ứng phụ thuộc vào kích cỡ của ảnh đó, bằng cách tính giá trị overlap của anchors với ground truth boxes, ta có thể xác định được anchors đó là positive hay negative. </p>
+<div class="highlight"><pre><span></span><code>RPN (
+(features): Sequential (
+    (0): Conv2d(3, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (1): ReLU (inplace)
+    (2): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (3): ReLU (inplace)
+    (4): MaxPool2d (size=(2, 2), stride=(2, 2), dilation=(1, 1))
+    (5): Conv2d(64, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (6): ReLU (inplace)
+    (7): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (8): ReLU (inplace)
+    (9): MaxPool2d (size=(2, 2), stride=(2, 2), dilation=(1, 1))
+    (10): Conv2d(128, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (11): ReLU (inplace)
+    (12): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (13): ReLU (inplace)
+    (14): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (15): ReLU (inplace)
+    (16): MaxPool2d (size=(2, 2), stride=(2, 2), dilation=(1, 1))
+    (17): Conv2d(256, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (18): ReLU (inplace)
+    (19): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (20): ReLU (inplace)
+    (21): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (22): ReLU (inplace)
+    (23): MaxPool2d (size=(2, 2), stride=(2, 2), dilation=(1, 1))
+    (24): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (25): ReLU (inplace)
+    (26): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (27): ReLU (inplace)
+    (28): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (29): ReLU (inplace)
+    (30): MaxPool2d (size=(2, 2), stride=(2, 2), dilation=(1, 1))
+)
+(conv1): Conv2d (
+    (conv): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    (relu): ReLU (inplace)
+)
+(score_conv): Conv2d (
+    (conv): Conv2d(512, 18, kernel_size=(1, 1), stride=(1, 1))
+)
+(bbox_conv): Conv2d (
+    (conv): Conv2d(512, 36, kernel_size=(1, 1), stride=(1, 1)))
+)
+</code></pre></div>
+
+</li>
+</ol>
+<h4 id="anchors">Anchors</h4>
+<p><img src="/images/rpn/anchors.png" width="600" title="'RPN'" alt="'RPN'"></p>
+<p>Sau khi đã có đầu ra của các region proposal, chúng ta sẽ tìm hiểu về khái niệm anchors. Tại mỗi vị trí của sliding window trên convolutional features, chúng ta tạo ra <span class="math">\(k\)</span> anchors tương ứng ở hình ảnh gốc. Trong bài báo, tác giả sử dụng 1 hình vuông, 2 hình chữ nhật với tỉ lệ chiều rộng, chiều dài là 1-2, 2-1, cùng với 3 kích cỡ khác nhau, như vậy <span class="math">\(k = 3 \times 3 = 9\)</span>. </p>
+<p>Các anchors này sẽ được gán mác là positive hoặc negative dựa vào diện tích overlap với ground truth box theo luật như sau.</p>
+<ul>
+<li>
+<p>Các anchor được phân loại là positive nếu</p>
+<ul>
+<li>Là anchor có  tỉ lệ diện tích chồng chéo trên diện tích chồng chập (Intersection-over-
+Union - viết tắt IoU) overlap lớn nhất với một ground truth box.</li>
+<li>Là anchor có  tỉ lệ IoU với một ground truth lớn hơn 0.7</li>
+</ul>
+</li>
+<li>
+<p>Các anchor được phân noại là negative nếu có giá trị IoU bé hơn 0.3</p>
+</li>
+<li>Các anchor không thỏa mãn 2 điều kiện nêu trên thì bỏ qua. Không được đánh giá trong quá trình training object.</li>
+</ul>
+<p><strong>Tại sao phải tạo ra những anchors này</strong>. Câu trả lời gồm 2 nguyên nhân chính</p>
+<ol>
+<li>Dựa phân loại của anchor, để dự đoán xác suất chứa vật thể của các region proposal</li>
+<li>Dựa vào khoảng cách từ anchor đến ground truth box, để dự đoán vị trí của bounding box. </li>
+</ol>
+<p>Từ đây ta xác định được tiêu đầu ra của <em>box-regression layer</em> và <em>box-classification</em> được nhắc tới ở phần cấu trúc mạng RPN. </p>
+<ul>
+<li>Box-classification dự đoán xác suất chứa vật thể của <span class="math">\(k\)</span> region proposal, tương ứng với <span class="math">\(k\)</span> anchor tại từng vị trí của sliding-window.</li>
+<li>Box-regression dự đoán khoảng cách tư anchor đến ground truth box tương ứng.</li>
+</ul>
+<h3 id="loss-function">Loss function</h3>
+<p>Loss function sẽ được định nghĩa theo công thức sau </p>
+<div class="math">$$
+L(\{ p_i \}, \{ t_i \}) = \frac{1}{N_{cls}} \sum_{i} L_{cls} (p_i, p_i^{*}) + \lambda \frac{1}{N_{reg}} \sum_{i} p_i^{*} L_{reg}(t_i, t_i^{*})
+$$</div>
+<p>
+Với <span class="math">\(i\)</span> là index của anchor trong mini-batch và <span class="math">\(p_i\)</span> là xác suất dự đoán của anchor <span class="math">\(i\)</span> là một đối tượng. Giá trị nhãn ground-truth <span class="math">\(p_i^{*}\)</span> là một nếu anchor là positive, và là không khi anchor là negative.</p>
+<ul>
+<li><span class="math">\(t_i\)</span>  là một vector 4 chiều biểu diễn giá trị tọa độ của bounding box đã được dự đoán. </li>
+<li><span class="math">\(t_i^{*}\)</span> là vector 4 chiều biểu diễn giá trị tọa độ của ground-truth box tương ứng với positive anchor.</li>
+<li><span class="math">\(L_{cls}\)</span> là log loss của 2 class (object và non-object) </li>
+<li><span class="math">\(L_{reg}\)</span> dùng SmoothL1Loss</li>
+</ul>
+<h4 id="cong-thuc-tinh-smooth-l1">Công thức tính Smooth L1</h4>
+<div class="math">$$
+loss(x, y) = \sum \begin{cases} 
+        0.5 * (x_i - y_i)^2, if |x_i - y_i| &lt; 1 \\  
+        |x_i - y_i| - 0.5,   otherwise   
+        \end{cases} \quad
+$$</div>
+<figure class='code'>
+<figcaption><span class="liquid-tags-code-title">anchor_target_layer.py</span><span class="liquid-tags-code-lines">[Lines 208-227]</span><a href='/code/rpn/anchor_target_layer.py'>download</a></figcaption>
+<div class="highlight"><pre><span></span><code>    <span class="n">bbox_targets</span> <span class="o">=</span> <span class="n">_compute_targets</span><span class="p">(</span><span class="n">anchors</span><span class="p">,</span> <span class="n">gt_boxes</span><span class="p">[</span><span class="n">argmax_overlaps</span><span class="p">,</span> <span class="p">:])</span>
+
+    <span class="n">bbox_inside_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">inds_inside</span><span class="p">),</span> <span class="mi">4</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">bbox_inside_weights</span><span class="p">[</span><span class="n">labels</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">TRAIN</span><span class="o">.</span><span class="n">RPN_BBOX_INSIDE_WEIGHTS</span><span class="p">)</span>
+
+    <span class="n">bbox_outside_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">inds_inside</span><span class="p">),</span> <span class="mi">4</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">TRAIN</span><span class="o">.</span><span class="n">RPN_POSITIVE_WEIGHT</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="c1"># uniform weighting of examples (given non-uniform sampling)</span>
+        <span class="n">num_examples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">labels</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="n">positive_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span> <span class="o">*</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">num_examples</span>
+        <span class="n">negative_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span> <span class="o">*</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">num_examples</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="p">((</span><span class="n">cfg</span><span class="o">.</span><span class="n">TRAIN</span><span class="o">.</span><span class="n">RPN_POSITIVE_WEIGHT</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span>
+                <span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">TRAIN</span><span class="o">.</span><span class="n">RPN_POSITIVE_WEIGHT</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="n">positive_weights</span> <span class="o">=</span> <span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">TRAIN</span><span class="o">.</span><span class="n">RPN_POSITIVE_WEIGHT</span> <span class="o">/</span>
+                            <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">labels</span> <span class="o">==</span> <span class="mi">1</span><span class="p">))</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">negative_weights</span> <span class="o">=</span> <span class="p">((</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">cfg</span><span class="o">.</span><span class="n">TRAIN</span><span class="o">.</span><span class="n">RPN_POSITIVE_WEIGHT</span><span class="p">)</span> <span class="o">/</span>
+                            <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">labels</span> <span class="o">==</span> <span class="mi">0</span><span class="p">))</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">bbox_outside_weights</span><span class="p">[</span><span class="n">labels</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">positive_weights</span>
+    <span class="n">bbox_outside_weights</span><span class="p">[</span><span class="n">labels</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">negative_weights</span>
+</code></pre></div>
+
+</figure>
+<p><code>bbox_inside_weights</code> tương ứng với giá trị nhãn <span class="math">\(p_{i}^{*}\)</span> có giá trị bằng một khi anchor tương ứng là positive anchors
+<code>bbox_outside_weights</code>  là hệ số để cân bằng giữa positive anchor và negative anchors  và đã nhân với giá trị  <span class="math">\(\frac{1}{N_{reg}}\)</span> . Trong cấu hình đưa ra bởi tác giả thì <code>TRAIN.RPN_POSITIVE_WEIGHT = -1</code>. Lúc này giá trị hệ số là bằng nhau.
+Định ngĩa của loss function</p>
+<div class="highlight"><pre><span></span><code><span class="nx">layer</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nx">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;rpn_loss_bbox&quot;</span>
+<span class="w">  </span><span class="k">type</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;SmoothL1Loss&quot;</span>
+<span class="w">  </span><span class="nx">bottom</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;rpn_bbox_pred&quot;</span>
+<span class="w">  </span><span class="nx">bottom</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;rpn_bbox_targets&quot;</span>
+<span class="w">  </span><span class="nx">bottom</span><span class="p">:</span><span class="w"> </span><span class="err">&#39;</span><span class="nx">rpn_bbox_inside_weights</span><span class="err">&#39;</span>
+<span class="w">  </span><span class="nx">bottom</span><span class="p">:</span><span class="w"> </span><span class="err">&#39;</span><span class="nx">rpn_bbox_outside_weights</span><span class="err">&#39;</span>
+<span class="w">  </span><span class="nx">top</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;rpn_loss_bbox&quot;</span>
+<span class="w">  </span><span class="nx">loss_weight</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">  </span><span class="nx">smooth_l1_loss_param</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">sigma</span><span class="p">:</span><span class="w"> </span><span class="m m-Double">3.0</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="loi-ket">Lời kết</h3>
+<p>Tôi đã gặp khó khăn rất nhiều khi tìm hiểu lý thuyết cũng như cách huấn luyện mạng Faster RCNN. Bài viết này nhằm chia sẻ những điều tôi đã học được cũng như cách tôi đã viết lại Faster RCNN bằng pytorch như thế nào. 
+Bạn có thể tham khảo tại github của tôi. <a href="https://github.com/anhlt/faster_rcnn">pytorch faster rcnn</a></p>
+<h3 id="trich-dan">Trích Dẫn</h3>
+<ol>
+<li><a href="https://www.quora.com/How-does-RPN-work-on-the-Faster-R-CNN?no_redirect=1" title="How-does-RPN-work-on-the-Faster-R-CNN">"How-does-RPN-work-on-the-Faster-R-CNN"</a></li>
+</ol>
+<script type="text/javascript">if (!document.getElementById('mathjaxscript_pelican_#%@#$@#')) {
+    var align = "center",
+        indent = "0em",
+        linebreak = "false";
+
+    if (false) {
+        align = (screen.width < 768) ? "left" : align;
+        indent = (screen.width < 768) ? "0em" : indent;
+        linebreak = (screen.width < 768) ? 'true' : linebreak;
+    }
+
+    var mathjaxscript = document.createElement('script');
+    mathjaxscript.id = 'mathjaxscript_pelican_#%@#$@#';
+    mathjaxscript.type = 'text/javascript';
+    mathjaxscript.src = 'https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.3/latest.js?config=TeX-AMS-MML_HTMLorMML';
+
+    var configscript = document.createElement('script');
+    configscript.type = 'text/x-mathjax-config';
+    configscript[(window.opera ? "innerHTML" : "text")] =
+        "MathJax.Hub.Config({" +
+        "    config: ['MMLorHTML.js']," +
+        "    TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'none' } }," +
+        "    jax: ['input/TeX','input/MathML','output/HTML-CSS']," +
+        "    extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']," +
+        "    displayAlign: '"+ align +"'," +
+        "    displayIndent: '"+ indent +"'," +
+        "    showMathMenu: true," +
+        "    messageStyle: 'normal'," +
+        "    tex2jax: { " +
+        "        inlineMath: [ ['\\\\(','\\\\)'] ], " +
+        "        displayMath: [ ['$$','$$'] ]," +
+        "        processEscapes: true," +
+        "        preview: 'TeX'," +
+        "    }, " +
+        "    'HTML-CSS': { " +
+        "        availableFonts: ['STIX', 'TeX']," +
+        "        preferredFont: 'STIX'," +
+        "        styles: { '.MathJax_Display, .MathJax .mo, .MathJax .mi, .MathJax .mn': {color: 'inherit ! important'} }," +
+        "        linebreaks: { automatic: "+ linebreak +", width: '90% container' }," +
+        "    }, " +
+        "}); " +
+        "if ('default' !== 'default') {" +
+            "MathJax.Hub.Register.StartupHook('HTML-CSS Jax Ready',function () {" +
+                "var VARIANT = MathJax.OutputJax['HTML-CSS'].FONTDATA.VARIANT;" +
+                "VARIANT['normal'].fonts.unshift('MathJax_default');" +
+                "VARIANT['bold'].fonts.unshift('MathJax_default-bold');" +
+                "VARIANT['italic'].fonts.unshift('MathJax_default-italic');" +
+                "VARIANT['-tex-mathit'].fonts.unshift('MathJax_default-italic');" +
+            "});" +
+            "MathJax.Hub.Register.StartupHook('SVG Jax Ready',function () {" +
+                "var VARIANT = MathJax.OutputJax.SVG.FONTDATA.VARIANT;" +
+                "VARIANT['normal'].fonts.unshift('MathJax_default');" +
+                "VARIANT['bold'].fonts.unshift('MathJax_default-bold');" +
+                "VARIANT['italic'].fonts.unshift('MathJax_default-italic');" +
+                "VARIANT['-tex-mathit'].fonts.unshift('MathJax_default-italic');" +
+            "});" +
+        "}";
+
+    (document.body || document.getElementsByTagName('head')[0]).appendChild(configscript);
+    (document.body || document.getElementsByTagName('head')[0]).appendChild(mathjaxscript);
+}
+</script>
+    </div>
+  </article>
+  <hr>
+  <div id="disqus_thread"></div>
+  <script>
+    var disqus_config = function() {
+      this.page.url = 'https://anhlt.github.io/rpn-explained-vi.html';
+      this.page.identifier = 'rpn-explained';
+    };
+    (function() {
+      var d = document;
+      var s = d.createElement('script');
+      s.src = '//deepmlml.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+  <noscript class="text-muted">
+    Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a>
+  </noscript>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="container">
+<div class="row">
+  <ul class="col-sm-6 list-inline">
+      <li class="list-inline-item"><a href="https://anhlt.github.io/authors.html">Authors</a></li>
+    <li class="list-inline-item"><a href="https://anhlt.github.io/archives.html">Archives</a></li>
+    <li class="list-inline-item"><a href="https://anhlt.github.io/categories.html">Categories</a></li>
+      <li class="list-inline-item"><a href="https://anhlt.github.io/tags.html">Tags</a></li>
+  </ul>
+  <p class="col-sm-6 text-sm-right text-muted">
+    Generated by <a href="https://github.com/getpelican/pelican" target="_blank">Pelican</a>
+    / <a href="https://github.com/nairobilug/pelican-alchemy" target="_blank">&#x2728;</a>
+  </p>
+</div>    </div>
+  </footer>
+
+</body>
+
+</html>
